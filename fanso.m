@@ -12,23 +12,27 @@ function fanso(timeseries, dt)
 %     sammy.mcsweeney@gmail.com
 
 % Create global variables which will be used for the actual plotting
-global global_dt         = dt
-global global_timeseries = timeseries
+global global_dt         = dt;
+global global_timeseries = timeseries;
 
-% Calculate default dimensions of figure windows
-global screensize
-global gapsize
-global winsize_x
-global winsize_y
-global winpos_x
-global winpos_y
+% Variables for the size and position of the figure windows
+global screensize;
+global gapsize;
+global winsize_x;
+global winsize_y;
+global winpos_x;
+global winpos_y;
 global fig1 = figure();
 global fig2 = figure();
 
+% Variables for the plot settings
 global zeromean;      % 0 = Do nothing;               1 = Zero mean before applying FFT
 global only_visible;  % 0 = FFT of entire timeseries; 1 = FFT of only visible timeseries
 global apply_hamming; % 0 = Do nothing;               1 = Apply Hamming window
 global apply_hanning; % 0 = Do nothing;               1 = Apply Hanning window
+
+% A global variable for the breakpoints
+global breakpoints;
 
 % Set initial values
 screensize = get(0, 'screensize');
@@ -38,6 +42,8 @@ zeromean      = 0;
 only_visible  = 0;
 apply_hamming = 0;
 apply_hanning = 0;
+
+breakpoints = [];
 
 % Require that we are using the correct graphics toolkit
 gtk = 'fltk';
@@ -57,7 +63,7 @@ m_fft_window_hanning = uimenu(m_fft_window, 'label', 'Ha&nning', 'accelerator', 
 m_fft_zeromean       = uimenu(m_fft, 'label', '&Zero-mean', 'accelerator', 'z', 'callback', @toggle_zeromean);
 m_fft_visible        = uimenu(m_fft, 'label', 'Only &visible', 'accelerator', 'v', 'callback', @toggle_visible);
 
-% Replot FFT when timeseries is zoomed
+% Replot FFT when timeseries is zoomed/panned
 addlistener(gca, 'xlim', @plot_fft);
 
 % Draw the plots for the first time
@@ -155,14 +161,13 @@ function plot_timeseries(src, data, first_time = 0)
     figure(fig1);
     ax = axis();
   end % if
-
   % Calculate the values for the timeseries abscissa
   N = length(global_timeseries);
   t = [0:(N-1)] * global_dt;
 
   % Plot the timeseries!
-  figure(fig1);
   plot(t, global_timeseries);
+  figure(fig1)
   xlabel('Time (s)');
   ylabel('Timeseries values');
   if (~first_time)
