@@ -15,7 +15,8 @@ function fanso(timeseries, dt)
 global global_dt         = dt;
 global global_timeseries = timeseries;
 global global_flattened  = timeseries; % timeseries flattened by linear detrending between breakpoints
-global breakpoint_mask   = ones(size(timeseries)); % 0 = do not use this value; 1 = use this value
+global breakpoint_mask   = ones(size(timeseries)); % 0 = do not use this value in calculating linear trends; 1 = use this value
+global profile_mask      = [0,0]
 
 % Variables for the size and position of the figure windows
 global screensize;
@@ -231,7 +232,7 @@ function plot_timeseries(src, data)
     m_bp_add             = uimenu(m_bp, 'label', 'Add &breakpoints', 'accelerator', 'b', 'callback', @add_breakpoints);
     global m_bp_apply    = uimenu(m_bp, 'label', 'A&pply breakpoints', 'separator', 'on', 'callback', @toggle_flatten);
 
-    m_profile            = uimenu('label', '&Profile', 'accelerator', 'p', 'callback', @plot_profile);
+    m_profile            = uimenu('label', '&Profile');
     m_profile_setperiod  = uimenu(m_profile, 'label', '&Set period', 'callback', @get_period_from_user);
     m_profile_setnbins   = uimenu(m_profile, 'label', '&Set no. profile bins', 'callback', @get_nbins_from_user);
     m_profile_plot       = uimenu(m_profile, 'label', '&Plot profile', 'separator', 'on', ...
@@ -396,24 +397,110 @@ function plot_profile(src, data)
   global profile
   global nprofile_bins
   global period
+  global profile_mask
 
+  first_time = 0;
   if (isempty(fig3))
     fig3 = figure();
+    first_time = 1;
   else
     figure(fig3);
   end % if
+
+  if (first_time)
+    % Set up menu for profile figure
+    m_mask        = uimenu('label', '&Mask');
+    m_mask_clear  = uimenu(m_mask, 'label', '&Clear', 'callback', @clear_mask);
+    m_mask_select = uimenu(m_mask, 'label', '&Select', 'callback', @select_mask);
+  end
 
   % Calculate profile
   calc_profile();
 
   % Plot it up!
+  hold off;
   dphase = 1/nprofile_bins;
   phase = [0:dphase:(1-dphase/2)]; % Ensure that there are the correct number of bins
   plot(phase, profile);
   xlabel('Phase');
   ylabel('Flux (arbitrary units)');
-  profile_title = sprintf('Period = %.12f;    No. of bins = %d', period, nprofile_bins);
+  profile_title = sprintf('Period = %.12f s;    No. of bins = %d', period, nprofile_bins);
   title(profile_title);
+  xlim([0,1]);
+
+  % Shade the masked area
+  ax = axis();
+  ymin = ax(3);
+  ymax = ax(4);
+  hold on;
+  mygreen = [0.5,1.0,0.5];
+  if (profile_mask(1) <= profile_mask(2))
+    area(profile_mask, [ymax, ymax], ymin, "FaceColor", mygreen, "linewidth", 0);
+  else
+    area([0,profile_mask(2)], [ymax,ymax], ymin, "FaceColor", mygreen, "linewidth", 0);
+    area([profile_mask(1),1], [ymax,ymax], ymin, "FaceColor", mygreen, "linewidth", 0);
+  end % if
+
+end % function
+
+function clear_mask(src, data)
+  global profile_mask
+  global breakpoint_mask
+
+  profile_mask = [0,0];
+  breakpoint_mask(:) = 1;
+
+  flatten();
+  plot_timeseries();
+  plot_profile();
+end % function
+
+function select_mask(src, data)
+
+  global profile_mask
+
+  global fig3
+  figure(fig3);
+
+  title('Choose low phase for start of mask');
+  [x1, y1, button1] = ginput(1);
+
+  title('Choose high phase for end of mask');
+  [x2, y2, button2] = ginput(1);
+
+  profile_mask = [x1,x2];
+
+  % Update timeseries figure
+  apply_profile_mask();
+  plot_timeseries();
+
+  % Update plot figure
+  plot_profile();
+
+end % function
+
+function apply_profile_mask()
+
+  global profile_mask
+  global breakpoint_mask
+
+  global period
+  global global_dt
+
+  % Calculate the phase of all the points in the timeseries
+  N = length(breakpoint_mask);
+  t = [0:(N-1)]' * global_dt;
+  phase = mod(t,period)/period;
+
+  % Set the breakpoint_mask to "0" for points "within" the mask
+  if (profile_mask(1) <= profile_mask(2))
+    mask_idxs = (phase >= profile_mask(1)) & (phase <= profile_mask(2));
+  else
+    mask_idxs = (phase >= profile_mask(1)) | (phase <= profile_mask(2));
+  end % if
+  breakpoint_mask = ~mask_idxs;
+
+  flatten();
 
 end % function
 
