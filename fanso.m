@@ -62,6 +62,7 @@ m_fft_window_hamming = uimenu(m_fft_window, 'label', 'Ha&mming', 'accelerator', 
 m_fft_window_hanning = uimenu(m_fft_window, 'label', 'Ha&nning', 'accelerator', 'n', 'callback', @toggle_hanning);
 m_fft_zeromean       = uimenu(m_fft, 'label', '&Zero-mean', 'accelerator', 'z', 'callback', @toggle_zeromean);
 m_fft_visible        = uimenu(m_fft, 'label', 'Only &visible', 'accelerator', 'v', 'callback', @toggle_visible);
+m_bp                 = uimenu('label', 'Add &breakpoints', 'accelerator', 'b', 'callback', @add_breakpoints);
 
 % Replot FFT when timeseries is zoomed/panned
 addlistener(gca, 'xlim', @plot_fft);
@@ -136,34 +137,61 @@ function toggle_visible(src, data)
 
 end % function
 
+function add_breakpoints(src, data)
+
+  global fig1;
+  global breakpoints;
+
+  do
+    figure(fig1);
+    title("Left mouse button = add breakpoint; right = remove breakpoint; 's' = stop\nDon't close window!");
+    [x, y, button] = ginput(1);
+    switch button
+      case 1 % left mouse button
+        breakpoints = union(breakpoints, x);
+      case 3 % right mouse button
+        [nearest_bpdiff, nearest_idx] = min(abs(breakpoints - x));
+        breakpoints = setdiff(breakpoints, breakpoints(nearest_idx));
+    end % switch
+%breakpoints
+%fflush(stdout);
+    %plot_timeseries(0,0,0);
+    plot(breakpoints);
+  until (button == 115)
+  title('');
+
+end % function
+
 function plot_timeseries(src, data, first_time = 0)
 
   global fig1
-  global screensize
-  global gapsize
-  global winsize_x
-  global winsize_y
-  global winpos_x
-  global winpos_y
-
-  winsize_x  = screensize(3) - 2*gapsize;
-  winsize_y  = floor((screensize(4) - 3*gapsize)/2);
-  winpos_x   = gapsize;
-  winpos_y   = 2*gapsize + winsize_y;
 
   global global_timeseries
   global global_dt
 
   % Switch to timeseries figure and keep track of the view window
   if (first_time)
+    global screensize
+    global gapsize
+    global winsize_x
+    global winsize_y
+    global winpos_x
+    global winpos_y
+
+    winsize_x  = screensize(3) - 2*gapsize;
+    winsize_y  = floor((screensize(4) - 3*gapsize)/2);
+    winpos_x   = gapsize;
+    winpos_y   = 2*gapsize + winsize_y;
+
     figure(fig1, "Position", [winpos_x, winpos_y, winsize_x, winsize_y]);
   else
     figure(fig1);
     ax = axis();
   end % if
+
   % Calculate the values for the timeseries abscissa
   N = length(global_timeseries);
-  t = [0:(N-1)] * global_dt;
+  t = [0:(N-1)]' * global_dt;
 
   % Plot the timeseries!
   plot(t, global_timeseries);
