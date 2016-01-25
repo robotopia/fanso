@@ -20,12 +20,9 @@ global breakpoint_mask   = ones(size(timeseries)); % 0 = do not use this value; 
 % Variables for the size and position of the figure windows
 global screensize;
 global gapsize;
-global winsize_x;
-global winsize_y;
-global winpos_x;
-global winpos_y;
 global fig1;
 global fig2;
+global fig3;
 
 % Variables for the plot settings
 global zeromean;      % 0 = Do nothing;               1 = Zero mean before applying FFT
@@ -62,9 +59,6 @@ end % if
 plot_timeseries();
 
 end % function
-
-
-
 
 function toggle_hamming(src, data)
 
@@ -230,10 +224,18 @@ function plot_timeseries(src, data)
     m_fft_window_hanning = uimenu(m_fft_window, 'label', 'Ha&nning', 'accelerator', 'n', 'callback', @toggle_hanning);
     m_fft_zeromean       = uimenu(m_fft, 'label', '&Zero-mean', 'accelerator', 'z', 'callback', @toggle_zeromean);
     m_fft_visible        = uimenu(m_fft, 'label', 'Only &visible', 'accelerator', 'v', 'callback', @toggle_visible);
-    m_fft_plotfft        = uimenu(m_fft, 'label', 'Plot FFT', 'separator', 'on', 'callback', @plot_fft);
+    m_fft_plotfft        = uimenu(m_fft, 'label', 'Plot FFT', 'separator', 'on', ...
+                                         'accelerator', 't', 'callback', @plot_fft);
+
     m_bp                 = uimenu('label', '&Breakpoints');
     m_bp_add             = uimenu(m_bp, 'label', 'Add &breakpoints', 'accelerator', 'b', 'callback', @add_breakpoints);
     global m_bp_apply    = uimenu(m_bp, 'label', 'A&pply breakpoints', 'separator', 'on', 'callback', @toggle_flatten);
+
+    m_profile            = uimenu('label', '&Profile', 'accelerator', 'p', 'callback', @plot_profile);
+    m_profile_setperiod  = uimenu(m_profile, 'label', '&Set period', 'callback', @get_period_from_user);
+    m_profile_setnbins   = uimenu(m_profile, 'label', '&Set no. profile bins', 'callback', @get_nbins_from_user);
+    m_profile_plot       = uimenu(m_profile, 'label', '&Plot profile', 'separator', 'on', ...
+                                             'accelerator', 'p', 'callback', @plot_profile);
 
   else
     figure(fig1);
@@ -387,6 +389,81 @@ function plot_fft(src, data)
 
 end % function
 
+function plot_profile(src, data)
+
+  global fig3
+
+  global profile
+  global nprofile_bins
+  global period
+
+  if (isempty(fig3))
+    fig3 = figure();
+  else
+    figure(fig3);
+  end % if
+
+  % Calculate profile
+  calc_profile();
+
+  % Plot it up!
+  dphase = 1/nprofile_bins;
+  phase = [0:dphase:(1-dphase/2)]; % Ensure that there are the correct number of bins
+  plot(phase, profile);
+  xlabel('Phase');
+  ylabel('Flux (arbitrary units)');
+  profile_title = sprintf('Period = %.12f;    No. of bins = %d', period, nprofile_bins);
+  title(profile_title);
+
+end % function
+
+function calc_profile()
+
+  global global_dt
+  global global_timeseries
+  global global_flattened
+  global nprofile_bins
+  global profile
+
+  global apply_bps
+
+  global period
+
+  if (isempty(period))
+    get_period_from_user();
+  end % if
+
+  if (isempty(nprofile_bins))
+    get_nbins_from_user();
+  end % if
+
+  % Use original or flattened, accordingly
+  if (apply_bps)
+    to_be_folded = global_flattened;
+  else
+    to_be_folded = global_timeseries;
+  end % if
+
+  % Calculate the values for the profile abscissa (=phase)
+  N = length(to_be_folded);
+  t = ([1:N]' - 0.5) * global_dt; % -0.5 is to avoid some of the more common computer precision errors
+  phase = mod(t,period)/period;
+  accum_subs = floor(phase * nprofile_bins) + 1;
+  profile = accumarray(accum_subs, to_be_folded, [nprofile_bins,1], @mean);
+
+end % function
+
+function res = get_period_from_user(src, data)
+  global period
+  user_input = inputdlg({"Enter period in seconds:"}, "Period", 1, {num2str(period)});
+  period = str2num(user_input{1});
+end % function
+
+function res = get_nbins_from_user(src, data)
+  global nprofile_bins
+  user_input = inputdlg({"Enter number of bins:"}, "Profile bins", 1, {num2str(nprofile_bins)});
+  nprofile_bins = str2num(user_input{1});
+end % function
 
 function flatten()
 
@@ -421,3 +498,7 @@ function flatten()
   end % for
 
 end % function
+
+
+
+
