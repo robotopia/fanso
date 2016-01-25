@@ -134,6 +134,12 @@ function add_breakpoints(src, data)
 
   global fig1;
   global breakpoints;
+  global apply_bps;
+  global m_bp_apply;
+
+  if (apply_bps)
+    toggle_flatten(m_bp_apply);
+  end % if
 
   do
     figure(fig1);
@@ -150,12 +156,12 @@ function add_breakpoints(src, data)
     end % switch
     flatten();
     plot_timeseries(0,0,0);
-  until (button == 115)
+  until (button == 115) % 115='s'
   title('');
 
 end % function
 
-function apply_breakpoints(src, data)
+function toggle_flatten(src, data)
 
   global fig2
 
@@ -227,7 +233,7 @@ function plot_timeseries(src, data)
     m_fft_plotfft        = uimenu(m_fft, 'label', 'Plot FFT', 'separator', 'on', 'callback', @plot_fft);
     m_bp                 = uimenu('label', '&Breakpoints');
     m_bp_add             = uimenu(m_bp, 'label', 'Add &breakpoints', 'accelerator', 'b', 'callback', @add_breakpoints);
-    m_bp_apply           = uimenu(m_bp, 'label', 'A&pply breakpoints', 'separator', 'on', 'callback', @apply_breakpoints);
+    global m_bp_apply    = uimenu(m_bp, 'label', 'A&pply breakpoints', 'separator', 'on', 'callback', @toggle_flatten);
 
   else
     figure(fig1);
