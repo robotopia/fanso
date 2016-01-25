@@ -22,8 +22,8 @@ global winsize_x;
 global winsize_y;
 global winpos_x;
 global winpos_y;
-global fig1 = figure();
-global fig2 = figure();
+global fig1;
+global fig2;
 
 % Variables for the plot settings
 global zeromean;      % 0 = Do nothing;               1 = Zero mean before applying FFT
@@ -54,24 +54,13 @@ else
   graphics_toolkit(gtk);
 end % if
 
-% Set up the menus
-figure(fig1);
-m_fft                = uimenu('label', 'FF&T', 'accelerator', 't');
-m_fft_window         = uimenu(m_fft, 'label', '&Windowing function', 'accelerator', 'w');
-m_fft_window_hamming = uimenu(m_fft_window, 'label', 'Ha&mming', 'accelerator', 'm', 'callback', @toggle_hamming);
-m_fft_window_hanning = uimenu(m_fft_window, 'label', 'Ha&nning', 'accelerator', 'n', 'callback', @toggle_hanning);
-m_fft_zeromean       = uimenu(m_fft, 'label', '&Zero-mean', 'accelerator', 'z', 'callback', @toggle_zeromean);
-m_fft_visible        = uimenu(m_fft, 'label', 'Only &visible', 'accelerator', 'v', 'callback', @toggle_visible);
-m_bp                 = uimenu('label', 'Add &breakpoints', 'accelerator', 'b', 'callback', @add_breakpoints);
-
-% Replot FFT when timeseries is zoomed/panned
-addlistener(gca, 'xlim', @plot_fft);
-
 % Draw the plots for the first time
-plot_timeseries(0, 0, 1);
-plot_fft(0, 0, 1);
+plot_timeseries();
 
 end % function
+
+
+
 
 function toggle_hamming(src, data)
 
@@ -144,25 +133,24 @@ function add_breakpoints(src, data)
 
   do
     figure(fig1);
-    title("Left mouse button = add breakpoint; right = remove breakpoint; 's' = stop\nDon't close window!");
+    title("Left mouse button = add breakpoint; right = remove breakpoint; 's' = stop\nDON'T CLOSE THIS WINDOW!");
     [x, y, button] = ginput(1);
     switch button
       case 1 % left mouse button
         breakpoints = union(breakpoints, x);
       case 3 % right mouse button
-        [nearest_bpdiff, nearest_idx] = min(abs(breakpoints - x));
-        breakpoints = setdiff(breakpoints, breakpoints(nearest_idx));
+        if (length(breakpoints) > 0)
+          [nearest_bpdiff, nearest_idx] = min(abs(breakpoints - x));
+          breakpoints = setdiff(breakpoints, breakpoints(nearest_idx));
+        end
     end % switch
-%breakpoints
-%fflush(stdout);
-    %plot_timeseries(0,0,0);
-    plot(breakpoints);
+    plot_timeseries(0,0,0);
   until (button == 115)
   title('');
 
 end % function
 
-function plot_timeseries(src, data, first_time = 0)
+function plot_timeseries(src, data)
 
   global fig1
 
@@ -170,7 +158,18 @@ function plot_timeseries(src, data, first_time = 0)
   global global_dt
 
   % Switch to timeseries figure and keep track of the view window
+  first_time = 0;
+
+  if (isempty(fig1))
+    first_time = 1;
+  end
+
+  if (~isfigure(fig1))
+    first_time = 1;
+  end
+
   if (first_time)
+
     global screensize
     global gapsize
     global winsize_x
@@ -183,8 +182,21 @@ function plot_timeseries(src, data, first_time = 0)
     winpos_x   = gapsize;
     winpos_y   = 2*gapsize + winsize_y;
 
-    figure(fig1, "Position", [winpos_x, winpos_y, winsize_x, winsize_y]);
+    fig1 = figure("Position", [winpos_x, winpos_y, winsize_x, winsize_y]);
+
+    % Set up the menus
+    m_fft                = uimenu('label', 'FF&T');
+    m_fft_window         = uimenu(m_fft, 'label', '&Windowing function', 'accelerator', 'w');
+    m_fft_window_hamming = uimenu(m_fft_window, 'label', 'Ha&mming', 'accelerator', 'm', 'callback', @toggle_hamming);
+    m_fft_window_hanning = uimenu(m_fft_window, 'label', 'Ha&nning', 'accelerator', 'n', 'callback', @toggle_hanning);
+    m_fft_zeromean       = uimenu(m_fft, 'label', '&Zero-mean', 'accelerator', 'z', 'callback', @toggle_zeromean);
+    m_fft_visible        = uimenu(m_fft, 'label', 'Only &visible', 'accelerator', 'v', 'callback', @toggle_visible);
+    m_fft_plotfft        = uimenu(m_fft, 'label', 'Plot FFT', 'separator', 'on', 'callback', @plot_fft);
+    m_bp                 = uimenu('label', '&Breakpoints');
+    m_bp_add             = uimenu(m_bp, 'label', 'Add &breakpoints', 'accelerator', 'b', 'callback', @add_breakpoints);
+
   else
+fig1
     figure(fig1);
     ax = axis();
   end % if
@@ -204,22 +216,10 @@ function plot_timeseries(src, data, first_time = 0)
 
 end % function
 
-function plot_fft(src, data, first_time = 0)
+function plot_fft(src, data)
   % Set position,size of figures window
   global fig1
   global fig2
-
-  global screensize
-  global gapsize
-  global winsize_x
-  global winsize_y
-  global winpos_x
-  global winpos_y
-
-  winsize_x  = screensize(3) - 2*gapsize;
-  winsize_y  = floor((screensize(4) - 3*gapsize)/2);
-  winpos_x   = [gapsize, gapsize];
-  winpos_y   = [2*gapsize + winsize_y, gapsize];
 
   global zeromean
   global only_visible
@@ -229,15 +229,47 @@ function plot_fft(src, data, first_time = 0)
   global global_timeseries
   global global_dt
 
-  % Switch to FFT figure and keep track of the view window of timeseries figure
-  figure(fig1, "Position", [winpos_x(1), winpos_y(1), winsize_x, winsize_y]);
-  ax1 = axis();
-  if (first_time)
-    figure(fig2);
-  else
-    figure(fig2, "Position", [winpos_x(2), winpos_y(2), winsize_x, winsize_y]);
-    ax2 = axis();
+  % Make sure there is a timeseries figure showing
+  if (isempty(fig1))
+    error("No timeseries plot found");
   end % if
+
+  if (~isfigure(fig1))
+    error("No timeseries plot found");
+  end % if
+
+  figure(fig1);
+  ax1 = axis();
+
+  % Set up the FFT figure
+  first_time = 0;
+  if (isempty(fig2))
+    first_time = 1;
+  end
+
+  if (~isfigure(fig2))
+    first_time = 1;
+  end
+
+  if (first_time)
+
+    global screensize
+    global gapsize
+    global winsize_x
+    global winsize_y
+    global winpos_x
+    global winpos_y
+
+    winsize_x  = screensize(3) - 2*gapsize;
+    winsize_y  = floor((screensize(4) - 3*gapsize)/2);
+    winpos_x   = gapsize;
+    winpos_y   = gapsize;
+
+    fig2 = figure("Position", [winpos_x, winpos_y, winsize_x, winsize_y]);
+  else
+    figure(fig2);
+  end % if
+  ax2 = axis();
 
   % Are we processing the whole timeseries or just the visible part?
   if (only_visible)
