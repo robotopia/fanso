@@ -218,7 +218,17 @@ function plot_timeseries(src, data)
 
     fig1 = figure("Position", [winpos_x, winpos_y, winsize_x, winsize_y]);
 
-    % Set up the menus
+    %%%%%%%%%%%%%%%%%%%%
+    % Set up the menus %
+    %%%%%%%%%%%%%%%%%%%%
+
+    % The Data menu
+    m_data               = uimenu('label', '&Data');
+    m_data_new           = uimenu(m_data, 'label', '&New');
+    m_data_open          = uimenu(m_data, 'label', '&Open', 'separator', 'on');
+    m_data_save          = uimenu(m_data, 'label', '&Save');
+
+    % The FFT menu
     m_fft                = uimenu('label', 'FF&T');
     m_fft_window         = uimenu(m_fft, 'label', '&Windowing function', 'accelerator', 'w');
     m_fft_window_hamming = uimenu(m_fft_window, 'label', 'Ha&mming', 'accelerator', 'm', 'callback', @toggle_hamming);
@@ -228,10 +238,12 @@ function plot_timeseries(src, data)
     m_fft_plotfft        = uimenu(m_fft, 'label', 'Plot FFT', 'separator', 'on', ...
                                          'accelerator', 't', 'callback', @plot_fft);
 
+    % The Breakpoints menu
     m_bp                 = uimenu('label', '&Breakpoints');
     m_bp_add             = uimenu(m_bp, 'label', 'Add &breakpoints', 'accelerator', 'b', 'callback', @add_breakpoints);
     global m_bp_apply    = uimenu(m_bp, 'label', 'A&pply breakpoints', 'separator', 'on', 'callback', @toggle_flatten);
 
+    % The Profile menu
     m_profile            = uimenu('label', '&Profile');
     m_profile_setperiod  = uimenu(m_profile, 'label', '&Set period', 'callback', @get_period_from_user);
     m_profile_setnbins   = uimenu(m_profile, 'label', '&Set no. profile bins', 'callback', @get_nbins_from_user);
