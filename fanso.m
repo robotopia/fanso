@@ -50,7 +50,7 @@ breakpoints = [];
 % Require that we are using the correct graphics toolkit
 gtk = 'fltk';
 if (~any(strcmp(available_graphics_toolkits(), gtk)))
-  disp('This function requires ',gtk,' to be installed.')
+  disp(['This function requires ',gtk,' to be installed.'])
   return;
 else
   graphics_toolkit(gtk);
