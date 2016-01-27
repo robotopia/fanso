@@ -118,30 +118,70 @@ function load_fan(src, data)
   global nprofile_bins
   global period
 
-  % Open up a Save File dialog box
+  % Open up an Open File dialog box
   [loadfile, loadpath, fltidx] = uigetfile({"*.fan", "FANSO file"});
-
-  load([loadpath, loadfile]);
+  load("-text", [loadpath, loadfile]);
 
   % (Re-)plot all
   global fig1
   global fig2
   global fig3
 
-  plot_timeseries(0,0,1); % <-- = rescale
+  replot_all([1,0,0]); % <-- 1 = rescale
 
-  if (~isempty(fig2))
-    if (isfigure(fig2))
-      plot_fft();
+end % function
+
+function import_timeseries(src, data)
+
+  global timeseries
+  global flattened
+  global breakpoint_mask
+  global profile_mask
+  global zeromean
+  global only_visible
+  global apply_hamming
+  global apply_hanning
+  global apply_bps
+
+  % Get file from Open File dialog box
+  [loadfile, loadpath, fltidx] = uigetfile();
+
+  try
+    mat = load("-ascii", [loadpath, loadfile]);
+
+    if (~isvector(mat))
+      warndlg("Input file contains multiple columns.\nReading only the first column as timeseries.", ...
+              "Multiple columns detected");
     end % if
-  end % if
 
-  if (~isempty(fig3))
-    if (isfigure(fig3))
-      plot_profile();
-    end % if
-  end % if
+    timeseries = mat(:,1);
+    change_dt();
 
+    flattened  = timeseries;
+    breakpoint_mask   = ones(size(timeseries));
+    profile_mask      = [0,0];
+
+    zeromean      = 0;
+    only_visible  = 0;
+    apply_hamming = 0;
+    apply_hanning = 0;
+    apply_bps     = 0;
+
+  catch
+    errordlg("This file is in an unreadable format.\nSee the '-ascii' option in Octave's load() function for details", ...
+             "Open file error");
+  end % try
+
+end % function
+
+function change_dt(src, data)
+
+  global dt;
+
+  cstr = inputdlg("Please enter the timestep in seconds:", "Set timestep");
+  dt   = str2num(cstr{1});
+
+  replot_all([1,0,0]);
 
 end % function
 
@@ -189,7 +229,7 @@ function toggle_zeromean(src, data)
   end % if
 
   % Redraw plots
-  replot_all()
+  replot_all();
 
 end % function
 
@@ -304,9 +344,10 @@ function plot_timeseries(src, data, rescale = 0)
 
     % The Data menu
     m_data               = uimenu('label', '&Data');
-    m_data_new           = uimenu(m_data, 'label', '&New');
-    m_data_open          = uimenu(m_data, 'label', '&Open', 'separator', 'on', 'callback', @load_fan);
+    m_data_open          = uimenu(m_data, 'label', '&Open', 'callback', @load_fan);
     m_data_save          = uimenu(m_data, 'label', '&Save', 'callback', @save_fan);
+    m_data_import_ts     = uimenu(m_data, 'label', '&Import timeseries', 'separator', 'on', 'callback', @import_timeseries);
+    m_data_change_dt     = uimenu(m_data, 'label', '&Change dt', 'callback', @change_dt);
 
     % The FFT menu
     m_fft                = uimenu('label', 'FF&T');
@@ -693,7 +734,7 @@ function flatten()
 
 end % function
 
-function replot_all()
+function replot_all(rescale = [0,0,0])
 
   global fig1
   global fig2
@@ -701,19 +742,19 @@ function replot_all()
 
   if (~isempty(fig1))
     if (isfigure(fig1))
-      plot_timeseries();
+      plot_timeseries(0,0,rescale(1));
     end % if
   end % if
 
   if (~isempty(fig2))
     if (isfigure(fig2))
-      plot_fft();
+      plot_fft(0,0,rescale(2));
     end % if
   end % if
 
   if (~isempty(fig3))
     if (isfigure(fig3))
-      plot_profile();
+      plot_profile(0,0,rescale(3));
     end % if
   end % if
 
