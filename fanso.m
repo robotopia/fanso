@@ -16,9 +16,8 @@ function fanso()
   % Variables for the size and position of the figure windows
   global screensize;
   global gapsize;
-  global fig1;
-  global fig2;
-  global fig3;
+  global fig_handles;
+  global fig_functions;
 
   % Variables for the plot settings
   global zeromean;      % 0 = Do nothing;               1 = Zero mean before applying FFT
@@ -31,9 +30,12 @@ function fanso()
   global breakpoints;
 
   % Set initial values
-  fig1 = [];
-  fig2 = [];
-  fig3 = [];
+  fig_handles = zeros(10,1); % 10 is arbitrary. Should be more than enough. Increase if needed.
+                             % (1) = timeseries plot
+                             % (2) = FFT plot
+                             % (3) = profile plot
+                             % (4) = harmonic resolved fluctuation spectrum plot
+  fig_functions = {@plot_timeseries, @plot_fft, @plot_profile};
 
   timeseries = zeros(100,1);
   dt         = 1;
@@ -250,7 +252,7 @@ end % function
 
 function add_breakpoints(src, data)
 
-  global fig1;
+  global fig_handles;
   global breakpoints;
   global apply_bps;
   global m_bp_apply;
@@ -260,7 +262,7 @@ function add_breakpoints(src, data)
   end % if
 
   do
-    figure(fig1);
+    figure(fig_handles(1));
     title("Left mouse button = add breakpoint; right = remove breakpoint; 's' = stop\nDON'T CLOSE THIS WINDOW!");
     [x, y, button] = ginput(1);
     switch button
@@ -280,7 +282,7 @@ end % function
 
 function toggle_flatten(src, data)
 
-  global fig2
+  global fig_handles; % <-- is this (and other similar lines) needed?
 
   global apply_bps
   apply_bps = ~apply_bps;
@@ -296,9 +298,117 @@ function toggle_flatten(src, data)
 
 end % function
 
-function plot_timeseries(src, data, rescale = 0)
+function create_figure(src, data, fig_no)
 
-  global fig1
+  global fig_handles
+
+  switch fig_no
+    case 1 % The timeseries figure
+      global screensize
+      global gapsize
+
+      winsize_x  = screensize(3) - 2*gapsize;
+      winsize_y  = floor((screensize(4) - 3*gapsize)/2);
+      winpos_x   = gapsize;
+      winpos_y   = 2*gapsize + winsize_y;
+
+      fig_handles(fig_no) = figure("Position", [winpos_x, winpos_y, winsize_x, winsize_y], ...
+                                   "DeleteFcn", {@destroy_figure, fig_no});
+
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+      % Set up the menu for the timeseries figure %
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+      % The Data menu
+      m_data               = uimenu('label', '&Data');
+      m_data_open          = uimenu(m_data, 'label', '&Open', 'callback', @load_fan);
+      m_data_save          = uimenu(m_data, 'label', '&Save', 'callback', @save_fan);
+      m_data_import_ts     = uimenu(m_data, 'label', '&Import timeseries', 'separator', 'on', 'callback', @import_timeseries);
+      m_data_change_dt     = uimenu(m_data, 'label', '&Change dt', 'callback', @change_dt);
+
+      % The FFT menu
+      m_fft                = uimenu('label', 'FF&T');
+      m_fft_window         = uimenu(m_fft, 'label', '&Windowing function', 'accelerator', 'w');
+      m_fft_window_hamming = uimenu(m_fft_window, 'label', 'Ha&mming', 'accelerator', 'm', 'callback', @toggle_hamming);
+      m_fft_window_hanning = uimenu(m_fft_window, 'label', 'Ha&nning', 'accelerator', 'n', 'callback', @toggle_hanning);
+      m_fft_zeromean       = uimenu(m_fft, 'label', '&Zero-mean', 'accelerator', 'z', 'callback', @toggle_zeromean);
+      m_fft_visible        = uimenu(m_fft, 'label', 'Only &visible', 'accelerator', 'v', 'callback', @toggle_visible);
+      m_fft_plotfft        = uimenu(m_fft, 'label', 'Plot FFT', 'separator', 'on', ...
+                                           'accelerator', 't', 'callback', @plot_fft);
+
+      % The Breakpoints menu
+      m_bp                 = uimenu('label', '&Breakpoints');
+      m_bp_add             = uimenu(m_bp, 'label', 'Add &breakpoints', 'accelerator', 'b', 'callback', @add_breakpoints);
+      m_bp_apply           = uimenu(m_bp, 'label', 'A&pply breakpoints', 'separator', 'on', 'callback', @toggle_flatten);
+
+      % The Profile menu
+      m_profile            = uimenu('label', '&Profile');
+      m_profile_setperiod  = uimenu(m_profile, 'label', '&Set period', 'callback', @get_period_from_user);
+      m_profile_setnbins   = uimenu(m_profile, 'label', '&Set no. profile bins', 'callback', @get_nbins_from_user);
+      m_profile_plot       = uimenu(m_profile, 'label', '&Plot profile', 'separator', 'on', ...
+                                               'accelerator', 'p', 'callback', @plot_profile);
+
+    case 2 % The FFT figure
+      global screensize
+      global gapsize
+
+      winsize_x  = screensize(3) - 2*gapsize;
+      winsize_y  = floor((screensize(4) - 3*gapsize)/2);
+      winpos_x   = gapsize;
+      winpos_y   = gapsize;
+
+      fig_handles(fig_no) = figure("Position", [winpos_x, winpos_y, winsize_x, winsize_y], ...
+                                   "DeleteFcn", {@destroy_figure, fig_no});
+
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+      % Set up menu for  FFT figure %
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+      m_fftanalyse        = uimenu('label', '&Analyse');
+      m_fftanalyse_period = uimenu(m_fftanalyse, 'label', '&Select period (P1)', 'callback', @select_period);
+
+    case 3 % The profile figure
+      fig_handles(fig_no) = figure("DeleteFcn", {@destroy_figure, fig_no});
+
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+      % Set up menu for profile figure %
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+      m_mask        = uimenu('label', '&Mask');
+      m_mask_clear  = uimenu(m_mask, 'label', '&Clear', 'callback', @clear_mask);
+      m_mask_select = uimenu(m_mask, 'label', '&Select', 'callback', @select_mask);
+
+    case 4 % The harmonic resolved fluctuation spectrum figure
+      fig_handles(fig_no) = figure("DeleteFcn", {@destroy_figure, fig_no});
+  end % switch
+
+end % function
+
+function destroy_figure(src, data, fig_no)
+
+  global fig_handles
+
+  if (fig_no == 1)
+    % Check if there are unsaved changes
+    % ... (yet to implement)
+
+    % Close all (open) figures attached to this instance of FANSO
+%    for fig_no = 1:length(fig_handles)
+%      h = fig_handles(fig_no);
+%      if (h)
+%        close h;
+%      end % if
+%    end % for
+    close all
+  else
+    fig_handles(fig_no) = 0;
+  end % if
+
+end % function
+
+function plot_timeseries(src, data)
+
+  global fig_handles
 
   global timeseries
   global flattened
@@ -308,72 +418,14 @@ function plot_timeseries(src, data, rescale = 0)
   global apply_bps
 
   % Switch to/Create timeseries figure and keep track of the view window
-  first_time = 0;
-
-  if (isempty(fig1))
-    first_time = 1;
-    rescale    = 1;
-  end
-
-  if (~isfigure(fig1))
-    first_time = 1;
-    rescale    = 1;
-  end
+  fig_no = 1;
+  first_time = (fig_handles(fig_no) == 0);
 
   if (first_time)
-
-    global screensize
-    global gapsize
-    global winsize_x
-    global winsize_y
-    global winpos_x
-    global winpos_y
-    global m_bp_apply
-
-    winsize_x  = screensize(3) - 2*gapsize;
-    winsize_y  = floor((screensize(4) - 3*gapsize)/2);
-    winpos_x   = gapsize;
-    winpos_y   = 2*gapsize + winsize_y;
-
-    fig1 = figure("Position", [winpos_x, winpos_y, winsize_x, winsize_y]);
-
-    %%%%%%%%%%%%%%%%%%%%
-    % Set up the menus %
-    %%%%%%%%%%%%%%%%%%%%
-
-    % The Data menu
-    m_data               = uimenu('label', '&Data');
-    m_data_open          = uimenu(m_data, 'label', '&Open', 'callback', @load_fan);
-    m_data_save          = uimenu(m_data, 'label', '&Save', 'callback', @save_fan);
-    m_data_import_ts     = uimenu(m_data, 'label', '&Import timeseries', 'separator', 'on', 'callback', @import_timeseries);
-    m_data_change_dt     = uimenu(m_data, 'label', '&Change dt', 'callback', @change_dt);
-
-    % The FFT menu
-    m_fft                = uimenu('label', 'FF&T');
-    m_fft_window         = uimenu(m_fft, 'label', '&Windowing function', 'accelerator', 'w');
-    m_fft_window_hamming = uimenu(m_fft_window, 'label', 'Ha&mming', 'accelerator', 'm', 'callback', @toggle_hamming);
-    m_fft_window_hanning = uimenu(m_fft_window, 'label', 'Ha&nning', 'accelerator', 'n', 'callback', @toggle_hanning);
-    m_fft_zeromean       = uimenu(m_fft, 'label', '&Zero-mean', 'accelerator', 'z', 'callback', @toggle_zeromean);
-    m_fft_visible        = uimenu(m_fft, 'label', 'Only &visible', 'accelerator', 'v', 'callback', @toggle_visible);
-    m_fft_plotfft        = uimenu(m_fft, 'label', 'Plot FFT', 'separator', 'on', ...
-                                         'accelerator', 't', 'callback', @plot_fft);
-
-    % The Breakpoints menu
-    m_bp                 = uimenu('label', '&Breakpoints');
-    m_bp_add             = uimenu(m_bp, 'label', 'Add &breakpoints', 'accelerator', 'b', 'callback', @add_breakpoints);
-    m_bp_apply           = uimenu(m_bp, 'label', 'A&pply breakpoints', 'separator', 'on', 'callback', @toggle_flatten);
-
-    % The Profile menu
-    m_profile            = uimenu('label', '&Profile');
-    m_profile_setperiod  = uimenu(m_profile, 'label', '&Set period', 'callback', @get_period_from_user);
-    m_profile_setnbins   = uimenu(m_profile, 'label', '&Set no. profile bins', 'callback', @get_nbins_from_user);
-    m_profile_plot       = uimenu(m_profile, 'label', '&Plot profile', 'separator', 'on', ...
-                                             'accelerator', 'p', 'callback', @plot_profile);
-
-  else
-    figure(fig1);
-    ax = axis();
+    create_figure(0,0,fig_no);
   end % if
+
+  figure(fig_handles(fig_no));
 
   % Calculate the values for the timeseries abscissa
   N = length(timeseries);
@@ -413,19 +465,15 @@ function plot_timeseries(src, data, rescale = 0)
       plot(t, timeseries, 'b');
     end % if
   end % if
-  figure(fig1);
+  figure(fig_handles(fig_no)); % <-- Possibly redundant, remains to be checked
   xlabel('Time (s)');
   ylabel('Timeseries values');
-  if (~rescale)
-    axis(ax);
-  end % if
 
 end % function
 
 function plot_fft(src, data)
   % Set position,size of figures window
-  global fig1
-  global fig2
+  global fig_handles
 
   global timeseries
   global flattened
@@ -437,54 +485,19 @@ function plot_fft(src, data)
   global apply_hanning
   global apply_bps
 
-  % Make sure there is a timeseries figure showing
-  if (isempty(fig1))
-    error("No timeseries plot found");
-  end % if
-
-  if (~isfigure(fig1))
-    error("No timeseries plot found");
-  end % if
-
-  figure(fig1);
+  % Assume there is a timeseries figure showing
+  figure(fig_handles(1));
   ax1 = axis();
 
-  % Set up the FFT figure
-  first_time = 0;
-  if (isempty(fig2))
-    first_time = 1;
-  end
-
-  if (~isfigure(fig2))
-    first_time = 1;
-  end
+  % Switch to/Create FFT figure and keep track of the view window
+  fig_no = 2;
+  first_time = (fig_handles(fig_no) == 0);
 
   if (first_time)
-
-    global screensize
-    global gapsize
-    global winsize_x
-    global winsize_y
-    global winpos_x
-    global winpos_y
-
-    winsize_x  = screensize(3) - 2*gapsize;
-    winsize_y  = floor((screensize(4) - 3*gapsize)/2);
-    winpos_x   = gapsize;
-    winpos_y   = gapsize;
-
-    fig2 = figure("Position", [winpos_x, winpos_y, winsize_x, winsize_y]);
-
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % Set up menu for  FFT figure %
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-    m_fftanalyse        = uimenu('label', '&Analyse');
-    m_fftanalyse_period = uimenu(m_fftanalyse, 'label', '&Select period (P1)', 'callback', @select_period);
-
-  else
-    figure(fig2);
+    create_figure(0,0,fig_no);
   end % if
+
+  figure(fig_handles(fig_no));
   ax2 = axis();
 
   % Are we plotting the original timeseries or the flattened timeseries?
@@ -529,7 +542,7 @@ function plot_fft(src, data)
   power = absed.^2;
 
   % Plot up the FFT
-  figure(fig2);
+  figure(fig_handles(fig_no)); % <-- Possible redundant, remains to be checked
   plot(f, power, 'b');
   xlabel('Frequency (Hz)');
   ylabel('Power');
@@ -545,8 +558,8 @@ end % function
 
 function select_period(src, data)
 
-  global fig2
-  figure(fig2);
+  global fig_handles
+  figure(fig_handles(2));
 
   global period;
 
@@ -567,34 +580,22 @@ end % function
 
 function plot_profile(src, data)
 
-  global fig3
+  global fig_handles
 
   global profile
   global nprofile_bins
   global period
   global profile_mask
 
-  first_time = 0;
-  if (isempty(fig3))
-    first_time = 1;
-  end % if
-
-  if (~isfigure(fig3))
-    first_time = 1;
-  end % if
+  % Switch to/Create FFT figure and keep track of the view window
+  fig_no = 3;
+  first_time = (fig_handles(fig_no) == 0);
 
   if (first_time)
-    fig3 = figure();
+    create_figure(0,0,fig_no);
+  end % if
 
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    % Set up menu for profile figure %
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    m_mask        = uimenu('label', '&Mask');
-    m_mask_clear  = uimenu(m_mask, 'label', '&Clear', 'callback', @clear_mask);
-    m_mask_select = uimenu(m_mask, 'label', '&Select', 'callback', @select_mask);
-  else
-    figure(fig3);
-  end
+  figure(fig_handles(fig_no));
 
   % Calculate profile
   calc_profile();
@@ -641,8 +642,8 @@ function select_mask(src, data)
 
   global profile_mask
 
-  global fig3
-  figure(fig3); % Assumes figure is already open
+  global fig_handles
+  figure(fig_handles(3)); % Assumes figure is already open
 
   title('Choose low phase for start of mask');
   [x1, y1, button1] = ginput(1);
@@ -767,29 +768,33 @@ function flatten()
 
 end % function
 
-function replot_all(rescale = [0,0,0])
+function replot_all(rescale = [0,0,0,0,0,0,0,0,0,0])
 
-  global fig1
-  global fig2
-  global fig3
+  global fig_handles
+  global fig_functions
 
-  if (~isempty(fig1))
-    if (isfigure(fig1))
-      plot_timeseries(0,0,rescale(1));
+  % Loop through the figure numbers
+  for fig_no = 1:length(fig_handles)
+
+    h = fig_handles(fig_no);
+
+    % If the figure already exists and has an associated plot function
+    if ((fig_no <= length(fig_functions)) && (h ~= 0))
+
+      % If required, get previous view window and reapply to new plot
+      if (~rescale(fig_no))
+        figure(h);
+        ax = axis();
+        fig_functions{fig_no}();
+        figure(h);
+        axis(ax);
+      else
+        fig_functions{fig_no}();
+      end % if
+      
     end % if
-  end % if
 
-  if (~isempty(fig2))
-    if (isfigure(fig2))
-      plot_fft(0,0,rescale(2));
-    end % if
-  end % if
-
-  if (~isempty(fig3))
-    if (isfigure(fig3))
-      plot_profile(0,0,rescale(3));
-    end % if
-  end % if
+  end % for
 
 end % function
 
