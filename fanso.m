@@ -6,12 +6,16 @@ function fanso()
 %     Written by Sam McSweeney, 2016, Creative Commons Licence
 %     sammy.mcsweeney@gmail.com
 
-  % Create global variables which will be used for the actual plotting
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  % Global variables that need initialising %
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
   global dt;
   global timeseries;
   global flattened;  % timeseries flattened by linear detrending between breakpoints
   global breakpoint_mask;   % 0 = do not use this value in calculating linear trends; 1 = use this value
   global profile_mask;
+  global fft_plot_type;
 
   % Variables for the size and position of the figure windows
   global screensize;
@@ -35,13 +39,14 @@ function fanso()
                              % (2) = FFT plot
                              % (3) = profile plot
                              % (4) = harmonic resolved fluctuation spectrum plot
-  fig_functions = {@plot_timeseries, @plot_fft, @plot_profile};
+  fig_functions = {@plot_timeseries, @plot_fft, @plot_profile, @plot_hrfs};
 
-  timeseries = zeros(100,1);
-  dt         = 1;
-  flattened  = timeseries;
+  timeseries        = zeros(100,1);
+  dt                = 1;
+  flattened         = timeseries;
   breakpoint_mask   = ones(size(timeseries));
   profile_mask      = [0,0];
+  fft_plot_type     = 0; % 0 = abs(fft);  1 = power spectrum
 
   screensize = get(0, 'screensize');
   gapsize    = 100;
@@ -128,7 +133,19 @@ function load_fan(src, data)
   load("-text", [loadpath, loadfile]);
 
   % (Re-)plot all
-  replot_all([1,0,0]); % <-- 1 = rescale
+  replot_all([1,0,0]); % <-- 1 = rescale x-axis
+
+  % Set menu checkmarks appropriately
+  global m_fft_window_hamming
+  global m_fft_window_hanning
+  global m_fft_zeromean
+  global m_fft_visible
+  global m_bp_apply
+  set(m_fft_window_hamming, "checked", on_off(apply_hamming));
+  set(m_fft_window_hanning, "checked", on_off(apply_hanning));
+  set(m_fft_zeromean,       "checked", on_off(zeromean));
+  set(m_fft_visible,        "checked", on_off(only_visible));
+  set(m_bp_apply,           "checked", on_off(apply_bps));
 
 end % function
 
@@ -327,19 +344,21 @@ function create_figure(src, data, fig_no)
       m_data_change_dt     = uimenu(m_data, 'label', '&Change dt', 'callback', @change_dt);
 
       % The FFT menu
+      global m_fft_window_hamming  m_fft_window_hanning  m_fft_zeromean  m_fft_visible
       m_fft                = uimenu('label', 'FF&T');
       m_fft_window         = uimenu(m_fft, 'label', '&Windowing function', 'accelerator', 'w');
       m_fft_window_hamming = uimenu(m_fft_window, 'label', 'Ha&mming', 'accelerator', 'm', 'callback', @toggle_hamming);
       m_fft_window_hanning = uimenu(m_fft_window, 'label', 'Ha&nning', 'accelerator', 'n', 'callback', @toggle_hanning);
       m_fft_zeromean       = uimenu(m_fft, 'label', '&Zero-mean', 'accelerator', 'z', 'callback', @toggle_zeromean);
       m_fft_visible        = uimenu(m_fft, 'label', 'Only &visible', 'accelerator', 'v', 'callback', @toggle_visible);
-      m_fft_plotfft        = uimenu(m_fft, 'label', 'Plot FFT', 'separator', 'on', ...
-                                           'accelerator', 't', 'callback', @plot_fft);
+      m_fft_plotfft        = uimenu(m_fft, 'label', 'Plot FFT', 'separator', 'on', 'accelerator', 't', 'callback', @plot_fft);
 
       % The Breakpoints menu
+      global m_bp_apply
       m_bp                 = uimenu('label', '&Breakpoints');
       m_bp_add             = uimenu(m_bp, 'label', 'Add &breakpoints', 'accelerator', 'b', 'callback', @add_breakpoints);
-      m_bp_apply           = uimenu(m_bp, 'label', 'A&pply breakpoints', 'separator', 'on', 'callback', @toggle_flatten);
+      m_bp_apply           = uimenu(m_bp, 'label', 'A&pply breakpoints', 'separator', 'on', ...
+                                          'callback', @toggle_flatten);
 
       % The Profile menu
       m_profile            = uimenu('label', '&Profile');
@@ -364,6 +383,10 @@ function create_figure(src, data, fig_no)
       % Set up menu for  FFT figure %
       %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+      m_fftplot           = uimenu('label', 'FF&T');
+      m_fftplot_abs       = uimenu(m_fftplot, 'label', 'Absolute value', 'callback', {@change_fft_plot_type, 0});
+      m_fftplot_abs       = uimenu(m_fftplot, 'label', 'Power', 'callback', {@change_fft_plot_type, 1});
+
       m_fftanalyse        = uimenu('label', '&Analyse');
       m_fftanalyse_period = uimenu(m_fftanalyse, 'label', '&Select period (P1)', 'callback', @select_period);
 
@@ -382,6 +405,15 @@ function create_figure(src, data, fig_no)
       fig_handles(fig_no) = figure("DeleteFcn", {@destroy_figure, fig_no});
   end % switch
 
+end % function
+
+function str = on_off(bool)
+% Converts 1,0 to "on","off" respectively
+  if (bool)
+    str = "on";
+  else
+    str = "off";
+  end % if
 end % function
 
 function destroy_figure(src, data, fig_no)
@@ -472,22 +504,12 @@ function plot_timeseries(src, data)
 end % function
 
 function plot_fft(src, data)
-  % Set position,size of figures window
+
   global fig_handles
 
-  global timeseries
-  global flattened
-  global dt
-
-  global zeromean
-  global only_visible
-  global apply_hamming
-  global apply_hanning
-  global apply_bps
-
-  % Assume there is a timeseries figure showing
-  figure(fig_handles(1));
-  ax1 = axis();
+  global spectrum_freqs
+  global spectrum_vals
+  global fft_plot_type
 
   % Switch to/Create FFT figure and keep track of the view window
   fig_no = 2;
@@ -497,62 +519,24 @@ function plot_fft(src, data)
     create_figure(0,0,fig_no);
   end % if
 
-  figure(fig_handles(fig_no));
-  ax2 = axis();
+  % Calculate the FFT
+  calc_fft();
 
-  % Are we plotting the original timeseries or the flattened timeseries?
-  if (apply_bps)
-    to_be_ffted = flattened;
-  else
-    to_be_ffted = timeseries;
-  end % if
-
-  % Are we processing just the visible part?
-  if (only_visible)
-    min_idx = max([floor(ax1(1)/dt)+1, 1]);
-    max_idx = min([floor(ax1(2)/dt)+1, length(timeseries)]); % <-- Check this
-    to_be_ffted = to_be_ffted([min_idx:max_idx]);
-  end % if
-
-  % Get the length of the timeseries to be FFT'd
-  n  = length(to_be_ffted);
-
-  % Apply zeromean
-  if (zeromean)
-    to_be_ffted = to_be_ffted - mean(to_be_ffted);
-  end % if
-
-  % Apply Hamming window
-  if (apply_hamming)
-    to_be_ffted = hamming(n) .* to_be_ffted;
-  end % if
-
-  % Apply Hanning window
-  if (apply_hanning)
-    to_be_ffted = hanning(n) .* to_be_ffted;
-  end % if
-
-  % Calculate the values...
-  % ...for the FFT abscissa...
-  df = 1/(dt*n);
-  f  = [0:(n-1)] * df;
-  % ...and the FFT ordinate (=power)...
-  ffted = fft(to_be_ffted);
-  absed = abs(ffted);
-  power = absed.^2;
+  % What kind of plot?
+  switch fft_plot_type
+    case 0 % Plot absolute values
+      to_be_plotted = abs(spectrum_vals);
+    case 1 % Plot power spectrum
+      to_be_plotted = abs(spectrum_vals).^2;
+    otherwise
+      error("Unknown FFT plot type");
+  end % switch
 
   % Plot up the FFT
-  figure(fig_handles(fig_no)); % <-- Possible redundant, remains to be checked
-  plot(f, power, 'b');
+  figure(fig_handles(fig_no));
+  plot(spectrum_freqs, to_be_plotted, 'b');
   xlabel('Frequency (Hz)');
   ylabel('Power');
-  if (~first_time)
-    % Keep xlim's as they were, but rescale ylim's accordingly
-    idx = find((f >= ax2(1)) & (f <= ax2(2)));
-    ymax = max(power(idx));
-    ax2 = [ax2(1), ax2(2), 0, ymax];
-    axis(ax2);
-  end % if
 
 end % function
 
@@ -626,6 +610,32 @@ function plot_profile(src, data)
 
 end % function
 
+function plot_hrfs(src, data)
+
+  global fig_handles
+
+  global timeseries
+  global flattened
+  global dt
+
+  global zeromean
+  global only_visible
+  global apply_hamming
+  global apply_hanning
+  global apply_bps
+
+  % Switch to/Create FFT figure and keep track of the view window
+  fig_no = 4;
+  first_time = (fig_handles(fig_no) == 0);
+
+  if (first_time)
+    create_figure(0,0,fig_no);
+  end % if
+
+  figure(fig_handles(fig_no));
+
+end % function
+
 function clear_mask(src, data)
   global profile_mask
   global breakpoint_mask
@@ -679,6 +689,66 @@ function apply_profile_mask()
     mask_idxs = (phase >= profile_mask(1)) | (phase <= profile_mask(2));
   end % if
   breakpoint_mask = ~mask_idxs;
+
+end % function
+
+function calc_fft()
+
+  global fig_handles
+
+  global timeseries
+  global flattened
+  global dt
+
+  global spectrum_freqs
+  global spectrum_vals
+
+  global zeromean
+  global only_visible
+  global apply_hamming
+  global apply_hanning
+  global apply_bps
+
+  % Are we getting the FFT of the original timeseries or the flattened timeseries?
+  if (apply_bps)
+    to_be_ffted = flattened;
+  else
+    to_be_ffted = timeseries;
+  end % if
+
+  % Are we processing just the visible part?
+  if (only_visible)
+    figure(fig_handles(1));
+    ax1 = axis();
+    min_idx = max([floor(ax1(1)/dt)+1, 1]);
+    max_idx = min([floor(ax1(2)/dt)+1, length(timeseries)]); % <-- Check this
+    to_be_ffted = to_be_ffted([min_idx:max_idx]);
+  end % if
+
+  % Get the length of the timeseries to be FFT'd
+  n  = length(to_be_ffted);
+
+  % Apply zeromean
+  if (zeromean)
+    to_be_ffted = to_be_ffted - mean(to_be_ffted);
+  end % if
+
+  % Apply Hamming window
+  if (apply_hamming)
+    to_be_ffted = hamming(n) .* to_be_ffted;
+  end % if
+
+  % Apply Hanning window
+  if (apply_hanning)
+    to_be_ffted = hanning(n) .* to_be_ffted;
+  end % if
+
+  % Calculate the values...
+  % ...for the FFT abscissa...
+  df              = 1/(dt*n);
+  spectrum_freqs  = [0:(n-1)] * df;
+  % ...and the FFT ordinate (=power)...
+  spectrum_vals = fft(to_be_ffted);
 
 end % function
 
@@ -768,6 +838,15 @@ function flatten()
 
 end % function
 
+function change_fft_plot_type(src, data, newvalue)
+
+  global fft_plot_type
+  fft_plot_type = newvalue;
+
+  replot_all();
+
+end % function
+
 function replot_all(rescale = [0,0,0,0,0,0,0,0,0,0])
 
   global fig_handles
@@ -787,7 +866,7 @@ function replot_all(rescale = [0,0,0,0,0,0,0,0,0,0])
         ax = axis();
         fig_functions{fig_no}();
         figure(h);
-        axis(ax);
+        xlim([ax(1), ax(2)]);
       else
         fig_functions{fig_no}();
       end % if
