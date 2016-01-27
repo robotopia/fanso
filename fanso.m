@@ -289,6 +289,7 @@ function plot_timeseries(src, data, rescale = 0)
     global winsize_y
     global winpos_x
     global winpos_y
+    global m_bp_apply
 
     winsize_x  = screensize(3) - 2*gapsize;
     winsize_y  = floor((screensize(4) - 3*gapsize)/2);
@@ -320,7 +321,7 @@ function plot_timeseries(src, data, rescale = 0)
     % The Breakpoints menu
     m_bp                 = uimenu('label', '&Breakpoints');
     m_bp_add             = uimenu(m_bp, 'label', 'Add &breakpoints', 'accelerator', 'b', 'callback', @add_breakpoints);
-    global m_bp_apply    = uimenu(m_bp, 'label', 'A&pply breakpoints', 'separator', 'on', 'callback', @toggle_flatten);
+    m_bp_apply           = uimenu(m_bp, 'label', 'A&pply breakpoints', 'separator', 'on', 'callback', @toggle_flatten);
 
     % The Profile menu
     m_profile            = uimenu('label', '&Profile');
