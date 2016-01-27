@@ -149,7 +149,6 @@ function add_breakpoints(src, data)
           breakpoints = setdiff(breakpoints, breakpoints(nearest_idx));
         end
     end % switch
-    flatten();
     plot_timeseries(0,0,0);
   until (button == 115) % 115='s'
   title('');
@@ -262,19 +261,32 @@ function plot_timeseries(src, data)
   % Plot different things depending on whether the breakpoints are
   % to be "applied" or not (i.e. whether the timeseries has been flattened).
   if (apply_bps)
+    flatten();
     plot(t, global_flattened, 'b');
   else
-    % Prepare vertical lines for breakpoint plotting
     if(~isempty(breakpoints))
+      global ms
+      global cs
+
+      flatten();
+
+      % Prepare vertical lines for breakpoint plotting
       bp_xs = [1;1] * breakpoints;
       ymin = min(global_timeseries);
       ymax = max(global_timeseries);
       bp_ys = repmat([ymin;ymax],size(breakpoints));
 
-      % Plot the flattened timeseries, the original timeseries, and breakpoints
-      plot(t, global_flattened,  'g', ...
-           t, global_timeseries, 'b', ...
-           bp_xs, bp_ys, 'r', 'linewidth', 2.0);
+      % Prepare the detrend lines for plotting
+      model_xs = [0, breakpoints;
+                  breakpoints, t(end)];
+      m_mat = repmat(ms',2,1);
+      c_mat = repmat(cs',2,1);
+      model_ys = model_xs .* m_mat + c_mat;
+
+      % Plot the original timeseries, breakpoints, and detrend lines
+      plot(t, global_timeseries, 'b', ...
+           bp_xs, bp_ys, 'r', 'linewidth', 2.0, ...
+           model_xs, model_ys, 'g', 'linewidth', 2.0);
     else
       % Plot the timeseries!
       plot(t, global_timeseries, 'b');
@@ -512,8 +524,6 @@ function apply_profile_mask()
   end % if
   breakpoint_mask = ~mask_idxs;
 
-  flatten();
-
 end % function
 
 function calc_profile()
@@ -572,6 +582,8 @@ function flatten()
   global breakpoint_mask
 
   global breakpoints
+  global ms  % The slopes of the model detrend lines
+  global cs  % The y-intercepts of the model detrend lines
 
   if (isempty(breakpoints))
     global_flattened = global_timeseries;
@@ -584,16 +596,18 @@ function flatten()
   bps = [t(1)-1, breakpoints, t(end)+1];
 
   % Loop through the breakpoints and detrend each segment
+  ms = zeros(length(bps)-1, 1);
+  cs = zeros(length(bps)-1, 1);
   for i = 1:(length(bps)-1)
     flatten_idxs  = (t >= bps(i)) & (t < bps(i+1));
     model_idxs    = flatten_idxs & breakpoint_mask;
     fit           = polyfit(t(model_idxs), global_timeseries(model_idxs), 1);
-    m             = fit(1);
-    c             = fit(2);
+    ms(i)         = fit(1);
+    cs(i)         = fit(2);
     y_orig        = global_timeseries(flatten_idxs);
     x             = t(flatten_idxs);
     global_flattened(flatten_idxs) ...
-                  = y_orig - (m*x + c);
+                  = y_orig - (ms(i)*x + cs(i));
   end % for
 
 end % function
