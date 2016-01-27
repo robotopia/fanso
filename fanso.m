@@ -1,63 +1,147 @@
-function fanso(timeseries, dt)
-% -- Function: fanso (timeseries, dt)
+function fanso()
+% -- Function: fanso (filename)
 %     Analyse a timeseries using the Fourier ANalysis Suite for Octave.
 %     Requires FLTK.
-%
-%     timeseries = a column vector of real values.
-%
-%     dt = a scalar (representing the time between consecutive
-%          points in timeseries).
 %
 %     Written by Sam McSweeney, 2016, Creative Commons Licence
 %     sammy.mcsweeney@gmail.com
 
-% Create global variables which will be used for the actual plotting
-global global_dt         = dt;
-global global_timeseries = timeseries;
-global global_flattened  = timeseries; % timeseries flattened by linear detrending between breakpoints
-global breakpoint_mask   = ones(size(timeseries)); % 0 = do not use this value in calculating linear trends; 1 = use this value
-global profile_mask      = [0,0]
 
-% Variables for the size and position of the figure windows
-global screensize;
-global gapsize;
-global fig1;
-global fig2;
-global fig3;
+  % Create global variables which will be used for the actual plotting
+  global dt;
+  global timeseries;
+  global flattened;  % timeseries flattened by linear detrending between breakpoints
+  global breakpoint_mask;   % 0 = do not use this value in calculating linear trends; 1 = use this value
+  global profile_mask;
 
-% Variables for the plot settings
-global zeromean;      % 0 = Do nothing;               1 = Zero mean before applying FFT
-global only_visible;  % 0 = FFT of entire timeseries; 1 = FFT of only visible timeseries
-global apply_hamming; % 0 = Do nothing;               1 = Apply Hamming window
-global apply_hanning; % 0 = Do nothing;               1 = Apply Hanning window
-global apply_bps;     % 0 = Do nothing;               1 = Apply breakpoints (i.e. "flatten" timeseries)
+  % Variables for the size and position of the figure windows
+  global screensize;
+  global gapsize;
+  global fig1;
+  global fig2;
+  global fig3;
 
-% A global variable for the breakpoints
-global breakpoints;
+  % Variables for the plot settings
+  global zeromean;      % 0 = Do nothing;               1 = Zero mean before applying FFT
+  global only_visible;  % 0 = FFT of entire timeseries; 1 = FFT of only visible timeseries
+  global apply_hamming; % 0 = Do nothing;               1 = Apply Hamming window
+  global apply_hanning; % 0 = Do nothing;               1 = Apply Hanning window
+  global apply_bps;     % 0 = Do nothing;               1 = Apply breakpoints (i.e. "flatten" timeseries)
 
-% Set initial values
-screensize = get(0, 'screensize');
-gapsize    = 100;
+  % A global variable for the breakpoints
+  global breakpoints;
 
-zeromean      = 0;
-only_visible  = 0;
-apply_hamming = 0;
-apply_hanning = 0;
-apply_bps     = 0;
+  % Set initial values
+  timeseries = zeros(100,1);
+  dt         = 1;
+  flattened  = timeseries;
+  breakpoint_mask   = ones(size(timeseries));
+  profile_mask      = [0,0];
 
-breakpoints = [];
+  screensize = get(0, 'screensize');
+  gapsize    = 100;
 
-% Require that we are using the correct graphics toolkit
-gtk = 'fltk';
-if (~any(strcmp(available_graphics_toolkits(), gtk)))
-  disp(['This function requires ',gtk,' to be installed.'])
-  return;
-else
-  graphics_toolkit(gtk);
-end % if
+  zeromean      = 0;
+  only_visible  = 0;
+  apply_hamming = 0;
+  apply_hanning = 0;
+  apply_bps     = 0;
 
-% Draw the plots for the first time
-plot_timeseries();
+  breakpoints = [];
+
+  % Require that we are using the correct graphics toolkit
+  gtk = 'fltk';
+  if (~any(strcmp(available_graphics_toolkits(), gtk)))
+    disp(['This function requires ',gtk,' to be installed.'])
+    return;
+  else
+    graphics_toolkit(gtk);
+  end % if
+
+  % Draw the (empty) plot for the first time
+  plot_timeseries();
+
+end % function
+
+function save_fan(src, data)
+
+  % Get all relevant global variables in this scope
+  global dt
+  global timeseries
+  global flattened
+  global breakpoint_mask
+  global profile_mask
+  global zeromean
+  global only_visible
+  global apply_hamming
+  global apply_hanning
+  global apply_bps
+  global breakpoints
+  global nprofile_bins
+  global period
+
+  % Open up a Save File dialog box
+  [savefile, savepath, fltidx] = uiputfile({"*.fan", "FANSO file"});
+
+  % Save all the info!
+  save([savepath, savefile], ...
+        "dt", ...
+        "timeseries", ...
+        "flattened", ...
+        "breakpoint_mask", ...
+        "profile_mask", ...
+        "zeromean", ...
+        "only_visible", ...
+        "apply_hamming", ...
+        "apply_hanning", ...
+        "apply_bps", ...
+        "breakpoints", ...
+        "nprofile_bins", ...
+        "period");
+
+end % function
+
+function load_fan(src, data)
+
+  % Get all relevant global variables in this scope
+  global dt
+  global timeseries
+  global flattened
+  global breakpoint_mask
+  global profile_mask
+  global zeromean
+  global only_visible
+  global apply_hamming
+  global apply_hanning
+  global apply_bps
+  global breakpoints
+  global nprofile_bins
+  global period
+
+  % Open up a Save File dialog box
+  [loadfile, loadpath, fltidx] = uigetfile({"*.fan", "FANSO file"});
+
+  load([loadpath, loadfile]);
+
+  % (Re-)plot all
+  global fig1
+  global fig2
+  global fig3
+
+  plot_timeseries(0,0,1); % <-- = rescale
+
+  if (~isempty(fig2))
+    if (isfigure(fig2))
+      plot_fft();
+    end % if
+  end % if
+
+  if (~isempty(fig3))
+    if (isfigure(fig3))
+      plot_profile();
+    end % if
+  end % if
+
 
 end % function
 
@@ -73,7 +157,7 @@ function toggle_hamming(src, data)
   end % if
 
   % Redraw plots
-  plot_fft()
+  replot_all();
 
 end % function
 
@@ -89,7 +173,7 @@ function toggle_hanning(src, data)
   end % if
 
   % Redraw plots
-  plot_fft()
+  replot_all();
 
 end % function
 
@@ -105,7 +189,7 @@ function toggle_zeromean(src, data)
   end % if
 
   % Redraw plots
-  plot_fft()
+  replot_all()
 
 end % function
 
@@ -121,7 +205,7 @@ function toggle_visible(src, data)
   end % if
 
   % Redraw plots
-  plot_fft()
+  replot_all();
 
 end % function
 
@@ -149,7 +233,7 @@ function add_breakpoints(src, data)
           breakpoints = setdiff(breakpoints, breakpoints(nearest_idx));
         end
     end % switch
-    plot_timeseries(0,0,0);
+    plot_timeseries();
   until (button == 115) % 115='s'
   title('');
 
@@ -169,23 +253,17 @@ function toggle_flatten(src, data)
   end % if
 
   % Redraw plots
-  plot_timeseries();
-
-  if (~isempty(fig2))
-    if (isfigure(fig2))
-      plot_fft();
-    end % if
-  end % if
+  replot_all();
 
 end % function
 
-function plot_timeseries(src, data)
+function plot_timeseries(src, data, rescale = 0)
 
   global fig1
 
-  global global_timeseries
-  global global_flattened
-  global global_dt
+  global timeseries
+  global flattened
+  global dt
 
   global breakpoints
   global apply_bps
@@ -195,10 +273,12 @@ function plot_timeseries(src, data)
 
   if (isempty(fig1))
     first_time = 1;
+    rescale    = 1;
   end
 
   if (~isfigure(fig1))
     first_time = 1;
+    rescale    = 1;
   end
 
   if (first_time)
@@ -224,8 +304,8 @@ function plot_timeseries(src, data)
     % The Data menu
     m_data               = uimenu('label', '&Data');
     m_data_new           = uimenu(m_data, 'label', '&New');
-    m_data_open          = uimenu(m_data, 'label', '&Open', 'separator', 'on');
-    m_data_save          = uimenu(m_data, 'label', '&Save');
+    m_data_open          = uimenu(m_data, 'label', '&Open', 'separator', 'on', 'callback', @load_fan);
+    m_data_save          = uimenu(m_data, 'label', '&Save', 'callback', @save_fan);
 
     % The FFT menu
     m_fft                = uimenu('label', 'FF&T');
@@ -255,14 +335,14 @@ function plot_timeseries(src, data)
   end % if
 
   % Calculate the values for the timeseries abscissa
-  N = length(global_timeseries);
-  t = [0:(N-1)]' * global_dt;
+  N = length(timeseries);
+  t = [0:(N-1)]' * dt;
 
   % Plot different things depending on whether the breakpoints are
   % to be "applied" or not (i.e. whether the timeseries has been flattened).
   if (apply_bps)
     flatten();
-    plot(t, global_flattened, 'b');
+    plot(t, flattened, 'b');
   else
     if(~isempty(breakpoints))
       global ms
@@ -272,8 +352,8 @@ function plot_timeseries(src, data)
 
       % Prepare vertical lines for breakpoint plotting
       bp_xs = [1;1] * breakpoints;
-      ymin = min(global_timeseries);
-      ymax = max(global_timeseries);
+      ymin = min(timeseries);
+      ymax = max(timeseries);
       bp_ys = repmat([ymin;ymax],size(breakpoints));
 
       % Prepare the detrend lines for plotting
@@ -284,18 +364,18 @@ function plot_timeseries(src, data)
       model_ys = model_xs .* m_mat + c_mat;
 
       % Plot the original timeseries, breakpoints, and detrend lines
-      plot(t, global_timeseries, 'b', ...
+      plot(t, timeseries, 'b', ...
            bp_xs, bp_ys, 'r', 'linewidth', 2.0, ...
            model_xs, model_ys, 'g', 'linewidth', 2.0);
     else
       % Plot the timeseries!
-      plot(t, global_timeseries, 'b');
+      plot(t, timeseries, 'b');
     end % if
   end % if
-  figure(fig1)
+  figure(fig1);
   xlabel('Time (s)');
   ylabel('Timeseries values');
-  if (~first_time)
+  if (~rescale)
     axis(ax);
   end % if
 
@@ -306,9 +386,9 @@ function plot_fft(src, data)
   global fig1
   global fig2
 
-  global global_timeseries
-  global global_flattened
-  global global_dt
+  global timeseries
+  global flattened
+  global dt
 
   global zeromean
   global only_visible
@@ -360,15 +440,15 @@ function plot_fft(src, data)
 
   % Are we plotting the original timeseries or the flattened timeseries?
   if (apply_bps)
-    to_be_ffted = global_flattened;
+    to_be_ffted = flattened;
   else
-    to_be_ffted = global_timeseries;
+    to_be_ffted = timeseries;
   end % if
 
   % Are we processing just the visible part?
   if (only_visible)
-    min_idx = max([floor(ax1(1)/global_dt)+1, 1]);
-    max_idx = min([floor(ax1(2)/global_dt)+1, length(global_timeseries)]); % <-- Check this
+    min_idx = max([floor(ax1(1)/dt)+1, 1]);
+    max_idx = min([floor(ax1(2)/dt)+1, length(timeseries)]); % <-- Check this
     to_be_ffted = to_be_ffted([min_idx:max_idx]);
   end % if
 
@@ -392,7 +472,7 @@ function plot_fft(src, data)
 
   % Calculate the values...
   % ...for the FFT abscissa...
-  df = 1/(global_dt*n);
+  df = 1/(dt*n);
   f  = [0:(n-1)] * df;
   % ...and the FFT ordinate (=power)...
   ffted = fft(to_be_ffted);
@@ -475,8 +555,8 @@ function clear_mask(src, data)
   breakpoint_mask(:) = 1;
 
   flatten();
-  plot_timeseries();
-  plot_profile();
+
+  replot_all();
 end % function
 
 function select_mask(src, data)
@@ -484,7 +564,7 @@ function select_mask(src, data)
   global profile_mask
 
   global fig3
-  figure(fig3);
+  figure(fig3); % Assumes figure is already open
 
   title('Choose low phase for start of mask');
   [x1, y1, button1] = ginput(1);
@@ -509,11 +589,11 @@ function apply_profile_mask()
   global breakpoint_mask
 
   global period
-  global global_dt
+  global dt
 
   % Calculate the phase of all the points in the timeseries
   N = length(breakpoint_mask);
-  t = [0:(N-1)]' * global_dt;
+  t = [0:(N-1)]' * dt;
   phase = mod(t,period)/period;
 
   % Set the breakpoint_mask to "0" for points "within" the mask
@@ -528,9 +608,9 @@ end % function
 
 function calc_profile()
 
-  global global_dt
-  global global_timeseries
-  global global_flattened
+  global dt
+  global timeseries
+  global flattened
   global nprofile_bins
   global profile
 
@@ -548,14 +628,14 @@ function calc_profile()
 
   % Use original or flattened, accordingly
   if (apply_bps)
-    to_be_folded = global_flattened;
+    to_be_folded = flattened;
   else
-    to_be_folded = global_timeseries;
+    to_be_folded = timeseries;
   end % if
 
   % Calculate the values for the profile abscissa (=phase)
   N = length(to_be_folded);
-  t = ([1:N]' - 0.5) * global_dt; % -0.5 is to avoid some of the more common computer precision errors
+  t = ([1:N]' - 0.5) * dt; % -0.5 is to avoid some of the more common computer precision errors
   phase = mod(t,period)/period;
   accum_subs = floor(phase * nprofile_bins) + 1;
   profile = accumarray(accum_subs, to_be_folded, [nprofile_bins,1], @mean);
@@ -576,9 +656,9 @@ end % function
 
 function flatten()
 
-  global global_dt
-  global global_timeseries
-  global global_flattened
+  global dt
+  global timeseries
+  global flattened
   global breakpoint_mask
 
   global breakpoints
@@ -586,12 +666,12 @@ function flatten()
   global cs  % The y-intercepts of the model detrend lines
 
   if (isempty(breakpoints))
-    global_flattened = global_timeseries;
+    flattened = timeseries;
   end % if
 
   % Book-end the breakpoints with initial and final values
-  N = length(global_timeseries);
-  t = [0:(N-1)]' * global_dt;
+  N = length(timeseries);
+  t = [0:(N-1)]' * dt;
 
   bps = [t(1)-1, breakpoints, t(end)+1];
 
@@ -601,17 +681,41 @@ function flatten()
   for i = 1:(length(bps)-1)
     flatten_idxs  = (t >= bps(i)) & (t < bps(i+1));
     model_idxs    = flatten_idxs & breakpoint_mask;
-    fit           = polyfit(t(model_idxs), global_timeseries(model_idxs), 1);
+    fit           = polyfit(t(model_idxs), timeseries(model_idxs), 1);
     ms(i)         = fit(1);
     cs(i)         = fit(2);
-    y_orig        = global_timeseries(flatten_idxs);
+    y_orig        = timeseries(flatten_idxs);
     x             = t(flatten_idxs);
-    global_flattened(flatten_idxs) ...
+    flattened(flatten_idxs) ...
                   = y_orig - (ms(i)*x + cs(i));
   end % for
 
 end % function
 
+function replot_all()
 
+  global fig1
+  global fig2
+  global fig3
+
+  if (~isempty(fig1))
+    if (isfigure(fig1))
+      plot_timeseries();
+    end % if
+  end % if
+
+  if (~isempty(fig2))
+    if (isfigure(fig2))
+      plot_fft();
+    end % if
+  end % if
+
+  if (~isempty(fig3))
+    if (isfigure(fig3))
+      plot_profile();
+    end % if
+  end % if
+
+end % function
 
 
