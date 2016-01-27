@@ -6,7 +6,6 @@ function fanso()
 %     Written by Sam McSweeney, 2016, Creative Commons Licence
 %     sammy.mcsweeney@gmail.com
 
-
   % Create global variables which will be used for the actual plotting
   global dt;
   global timeseries;
@@ -32,6 +31,10 @@ function fanso()
   global breakpoints;
 
   % Set initial values
+  fig1 = [];
+  fig2 = [];
+  fig3 = [];
+
   timeseries = zeros(100,1);
   dt         = 1;
   flattened  = timeseries;
@@ -123,10 +126,6 @@ function load_fan(src, data)
   load("-text", [loadpath, loadfile]);
 
   % (Re-)plot all
-  global fig1
-  global fig2
-  global fig3
-
   replot_all([1,0,0]); % <-- 1 = rescale
 
 end % function
@@ -475,6 +474,14 @@ function plot_fft(src, data)
     winpos_y   = gapsize;
 
     fig2 = figure("Position", [winpos_x, winpos_y, winsize_x, winsize_y]);
+
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Set up menu for  FFT figure %
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+    m_fftanalyse        = uimenu('label', '&Analyse');
+    m_fftanalyse_period = uimenu(m_fftanalyse, 'label', '&Select period (P1)', 'callback', @select_period);
+
   else
     figure(fig2);
   end % if
@@ -536,6 +543,28 @@ function plot_fft(src, data)
 
 end % function
 
+function select_period(src, data)
+
+  global fig2
+  figure(fig2);
+
+  global period;
+
+  title("Click on a harmonic of the desired frequency");
+
+  [x, y, button] = ginput(1);
+
+  cstr = inputdlg({"Harmonic number of selected point:"}, "Harmonic", 1, {"1"});
+  nharm = str2num(cstr{1});
+
+  period = nharm/x;
+
+  title("");
+
+  replot_all();
+
+end % function
+
 function plot_profile(src, data)
 
   global fig3
@@ -547,17 +576,24 @@ function plot_profile(src, data)
 
   first_time = 0;
   if (isempty(fig3))
-    fig3 = figure();
     first_time = 1;
-  else
-    figure(fig3);
+  end % if
+
+  if (~isfigure(fig3))
+    first_time = 1;
   end % if
 
   if (first_time)
-    % Set up menu for profile figure
+    fig3 = figure();
+
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Set up menu for profile figure %
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     m_mask        = uimenu('label', '&Mask');
     m_mask_clear  = uimenu(m_mask, 'label', '&Clear', 'callback', @clear_mask);
     m_mask_select = uimenu(m_mask, 'label', '&Select', 'callback', @select_mask);
+  else
+    figure(fig3);
   end
 
   % Calculate profile
@@ -615,13 +651,10 @@ function select_mask(src, data)
   [x2, y2, button2] = ginput(1);
 
   profile_mask = [x1,x2];
-
-  % Update timeseries figure
   apply_profile_mask();
-  plot_timeseries();
 
-  % Update plot figure
-  plot_profile();
+  % Update figures
+  replot_all();
 
 end % function
 
