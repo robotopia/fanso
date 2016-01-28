@@ -43,7 +43,7 @@ function fanso()
                              % (3) = profile plot
                              % (4) = harmonic resolved fluctuation spectrum plot
                              % (5) = waterfall plot of timeseries modulo period
-  fig_functions = {@plot_timeseries, @plot_fft, @plot_profile, @plot_hrfs, @plot_waterfall};
+  fig_functions = {@plot_timeseries, @plot_fft, @plot_profile, @plot_hrfs, @plot_waterfall, @plot_tdfs};
 
   timeseries          = zeros(100,1);
   dt                  = 1;
@@ -100,6 +100,8 @@ function save_fan(src, data)
   global hrfs_cmax
   global waterfall_cmin
   global waterfall_cmax
+  global tdfs_cmin
+  global tdfs_cmax
 
   % Open up a Save File dialog box
   [savefile, savepath, fltidx] = uiputfile({"*.fan", "FANSO file"});
@@ -124,7 +126,9 @@ function save_fan(src, data)
           "hrfs_cmin", ...
           "hrfs_cmax", ...
           "waterfall_cmin", ...
-          "waterfall_cmax");
+          "waterfall_cmax", ...
+          "tdfs_cmin", ...
+          "tdfs_cmax");
   end % if
 
 end % function
@@ -150,6 +154,8 @@ function load_fan(src, data)
   global hrfs_cmax
   global waterfall_cmin
   global waterfall_cmax
+  global tdfs_cmin
+  global tdfs_cmax
 
   % Open up an Open File dialog box
   [loadfile, loadpath, fltidx] = uigetfile({"*.fan", "FANSO file"});
@@ -414,6 +420,7 @@ function create_figure(src, data, fig_no)
       m_fft_visible        = uimenu(m_fft, 'label', 'Only &visible', 'accelerator', 'v', 'callback', @toggle_visible);
       m_fft_plotfft        = uimenu(m_fft, 'label', 'Plot FFT', 'separator', 'on', 'accelerator', 't', 'callback', @plot_fft);
       m_fft_plothrfs       = uimenu(m_fft, 'label', 'Plot HRFS', 'accelerator', 'h', 'callback', @plot_hrfs);
+      m_fft_plottdfs       = uimenu(m_fft, 'label', 'Plot 2DFS', 'accelerator', '2', 'callback', @plot_tdfs);
 
       % The Breakpoints menu
       global m_bp_apply
@@ -520,6 +527,30 @@ function create_figure(src, data, fig_no)
                                                'accelerator', '-', ...
                                                'callback', {@change_dynamic_range, fig_no, -0.1, 0});
 
+    case 6 % The 2DFS plot
+      fig_handles(fig_no) = figure("Name", "2D Fluctuation Spectrum", ...
+                                   "DeleteFcn", {@destroy_figure, fig_no});
+
+      m_tdfs_dynamicrange        = uimenu('label', '&Dynamic range');
+      m_tdfs_dynamicrange_change = uimenu(m_tdfs_dynamicrange, ...
+                                          'label', 'Set dynamic range limits', ...
+                                          'callback', {@change_dynamic_range, fig_no, 0, 0});
+      m_tdfs_dynamicrange_incmax = uimenu(m_tdfs_dynamicrange, ...
+                                          'label', 'Increase Max by 10% of range', ...
+                                          'accelerator', '+', 'separator', 'on', ...
+                                          'callback', {@change_dynamic_range, fig_no, 0,  0.1});
+      m_tdfs_dynamicrange_decmax = uimenu(m_tdfs_dynamicrange, ...
+                                          'label', 'Decrease Max by 10% of range', ...
+                                          'accelerator', '_', ...
+                                          'callback', {@change_dynamic_range, fig_no, 0, -0.1});
+      m_tdfs_dynamicrange_incmin = uimenu(m_tdfs_dynamicrange,
+                                          'label', 'Increase Min by 10% of range', ...
+                                          'accelerator', '=', ...
+                                          'callback', {@change_dynamic_range, fig_no,  0.1, 0});
+      m_tdfs_dynamicrange_decmin = uimenu(m_tdfs_dynamicrange, ...
+                                          'label', 'Decrease Min by 10% of range', ...
+                                          'accelerator', '-', ...
+                                          'callback', {@change_dynamic_range, fig_no, -0.1, 0});
 
   end % switch
 
@@ -542,6 +573,9 @@ function change_dynamic_range(src, data, fig_no, minfactor, maxfactor)
   global waterfall_cmin
   global waterfall_cmax
 
+  global tdfs_cmin
+  global tdfs_cmax
+
   if (all(~[minfactor, maxfactor])) % Putting in zeros for these parameters brings up a dialog box
     switch fig_no
       case 4 % HRFS
@@ -558,6 +592,13 @@ function change_dynamic_range(src, data, fig_no, minfactor, maxfactor)
           waterfall_cmin = str2num(cstrs{1});
           waterfall_cmax = str2num(cstrs{2});
         end % if
+      case 6 % 2DFS
+        cstrs = inputdlg({"Min:", "Max:"}, "Enter new dynamic range limits", ...
+                         1, {num2str(tdfs_cmin), num2str(tdfs_cmax)});
+        if (~isempty(cstrs))
+          tdfs_cmin = str2num(cstrs{1});
+          tdfs_cmax = str2num(cstrs{2});
+        end % if
     end % switch
   else
     switch fig_no
@@ -569,6 +610,10 @@ function change_dynamic_range(src, data, fig_no, minfactor, maxfactor)
         crange = waterfall_cmax - waterfall_cmin;
         waterfall_cmin = waterfall_cmin + crange*minfactor;
         waterfall_cmax = waterfall_cmax + crange*maxfactor;
+      case 6 % 2DFS
+        crange = tdfs_cmax - tdfs_cmin;
+        tdfs_cmin = tdfs_cmin + crange*minfactor;
+        tdfs_cmax = tdfs_cmax + crange*maxfactor;
     end % switch
   end % if
 
@@ -890,8 +935,53 @@ function plot_waterfall(src, data)
       error("Unknown waterfall plot type requested");
   end % switch
 
-  xlabel('Phase')
+  xlabel('Phase');
   ylabel('Pulse number');
+
+end % function
+
+function plot_tdfs(src, data)
+
+  global fig_handles
+
+  global timeseries_grid
+
+  global tdfs_cmin
+  global tdfs_cmax
+
+  % Switch to/Create HRFS figure and keep track of the view window
+  fig_no = 6;
+  first_time = (fig_handles(fig_no) == 0);
+
+  if (first_time)
+    create_figure(0,0,fig_no);
+  end % if
+
+  figure(fig_handles(fig_no));
+
+  % Calculate the 2DFS
+  reshape_timeseries_into_grid();
+  tdfs = abs(fft2(timeseries_grid));
+
+  % Get appropriate values for x and y axes
+  % FIX ME! These aren't appropriate values!
+  nxs = columns(tdfs);
+  nys =    rows(tdfs);
+
+  xs = [0:(nxs-1)] / nxs;  % Phase
+  ys = [1:nys];            % Pulse number
+  % END FIX ME
+
+  imagesc(xs, ys, tdfs);
+  colormap("gray");
+  axis("xy");
+  colorbar();
+  if (~isempty(tdfs_cmin) && ~isempty(tdfs_cmax))
+    caxis([tdfs_cmin, tdfs_cmax]);
+  end % if
+
+  xlabel('Inverse Phase'); % <-- FIX ME TOO
+  ylabel('Inverse Pulse number'); % <-- FIX ME TOO
 
 end % function
 
