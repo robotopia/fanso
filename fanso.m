@@ -25,6 +25,7 @@ function fanso()
 
   % Variables for the plot settings
   global zeromean;      % 0 = Do nothing;               1 = Zero mean before applying FFT
+  global zeropad;       % 0 = Do nothing;               1 = Zero-pad to a nearly-whole number of periods
   global only_visible;  % 0 = FFT of entire timeseries; 1 = FFT of only visible timeseries
   global apply_hamming; % 0 = Do nothing;               1 = Apply Hamming window
   global apply_hanning; % 0 = Do nothing;               1 = Apply Hanning window
@@ -52,6 +53,7 @@ function fanso()
   gapsize    = 100;
 
   zeromean      = 0;
+  zeropad       = 0;
   only_visible  = 0;
   apply_hamming = 0;
   apply_hanning = 0;
@@ -82,6 +84,7 @@ function save_fan(src, data)
   global breakpoint_mask
   global profile_mask
   global zeromean
+  global zeropad
   global only_visible
   global apply_hamming
   global apply_hanning
@@ -101,6 +104,7 @@ function save_fan(src, data)
         "breakpoint_mask", ...
         "profile_mask", ...
         "zeromean", ...
+        "zeropad", ...
         "only_visible", ...
         "apply_hamming", ...
         "apply_hanning", ...
@@ -120,6 +124,7 @@ function load_fan(src, data)
   global breakpoint_mask
   global profile_mask
   global zeromean
+  global zeropad
   global only_visible
   global apply_hamming
   global apply_hanning
@@ -139,11 +144,13 @@ function load_fan(src, data)
   global m_fft_window_hamming
   global m_fft_window_hanning
   global m_fft_zeromean
+  global m_fft_zeropad
   global m_fft_visible
   global m_bp_apply
   set(m_fft_window_hamming, "checked", on_off(apply_hamming));
   set(m_fft_window_hanning, "checked", on_off(apply_hanning));
   set(m_fft_zeromean,       "checked", on_off(zeromean));
+  set(m_fft_zeropad,        "checked", on_off(zeropad));
   set(m_fft_visible,        "checked", on_off(only_visible));
   set(m_bp_apply,           "checked", on_off(apply_bps));
 
@@ -156,6 +163,7 @@ function import_timeseries(src, data)
   global breakpoint_mask
   global profile_mask
   global zeromean
+  global zeropad
   global only_visible
   global apply_hamming
   global apply_hanning
@@ -180,6 +188,7 @@ function import_timeseries(src, data)
     profile_mask      = [0,0];
 
     zeromean      = 0;
+    zeropad       = 0;
     only_visible  = 0;
     apply_hamming = 0;
     apply_hanning = 0;
@@ -241,6 +250,32 @@ function toggle_zeromean(src, data)
   zeromean = ~zeromean;
 
   if (zeromean)
+    set(src, 'checked', 'on');
+  else
+    set(src, 'checked', 'off');
+  end % if
+
+  % Redraw plots
+  replot_all();
+
+end % function
+
+function toggle_zeropad(src, data)
+
+  global zeropad
+  global period
+  global m_fft_zeropad
+
+  zeropad = ~zeropad;
+
+  if (nargin < 2)
+    src = m_fft_zeropad;
+  end % if
+
+  if (zeropad)
+    if (isempty(period))
+      get_period_from_user();
+    end % if
     set(src, 'checked', 'on');
   else
     set(src, 'checked', 'off');
@@ -344,14 +379,16 @@ function create_figure(src, data, fig_no)
       m_data_change_dt     = uimenu(m_data, 'label', '&Change dt', 'callback', @change_dt);
 
       % The FFT menu
-      global m_fft_window_hamming  m_fft_window_hanning  m_fft_zeromean  m_fft_visible
+      global m_fft_window_hamming  m_fft_window_hanning  m_fft_zeromean  m_fft_zeropad  m_fft_visible
       m_fft                = uimenu('label', 'FF&T');
       m_fft_window         = uimenu(m_fft, 'label', '&Windowing function', 'accelerator', 'w');
       m_fft_window_hamming = uimenu(m_fft_window, 'label', 'Ha&mming', 'accelerator', 'm', 'callback', @toggle_hamming);
       m_fft_window_hanning = uimenu(m_fft_window, 'label', 'Ha&nning', 'accelerator', 'n', 'callback', @toggle_hanning);
       m_fft_zeromean       = uimenu(m_fft, 'label', '&Zero-mean', 'accelerator', 'z', 'callback', @toggle_zeromean);
+      m_fft_zeropad        = uimenu(m_fft, 'label', '&Zero-pad', 'callback', @toggle_zeropad);
       m_fft_visible        = uimenu(m_fft, 'label', 'Only &visible', 'accelerator', 'v', 'callback', @toggle_visible);
       m_fft_plotfft        = uimenu(m_fft, 'label', 'Plot FFT', 'separator', 'on', 'accelerator', 't', 'callback', @plot_fft);
+      m_fft_plothrfs       = uimenu(m_fft, 'label', 'Plot HRFS', 'accelerator', 'h', 'callback', @plot_hrfs);
 
       % The Breakpoints menu
       global m_bp_apply
@@ -614,17 +651,15 @@ function plot_hrfs(src, data)
 
   global fig_handles
 
-  global timeseries
-  global flattened
   global dt
+  global period
 
-  global zeromean
-  global only_visible
-  global apply_hamming
-  global apply_hanning
-  global apply_bps
+  global zeropad
 
-  % Switch to/Create FFT figure and keep track of the view window
+  global spectrum_freqs
+  global spectrum_vals
+
+  % Switch to/Create HRFS figure and keep track of the view window
   fig_no = 4;
   first_time = (fig_handles(fig_no) == 0);
 
@@ -632,7 +667,33 @@ function plot_hrfs(src, data)
     create_figure(0,0,fig_no);
   end % if
 
+  % Turn on zero-padding
+  if (~zeropad)
+    toggle_zeropad();
+  end % if
+
+  % Calculate the FFT
+  calc_fft();
+
+  % Prepare the matrix of values
+  to_be_plotted = abs(spectrum_vals);
+  N             = length(to_be_plotted);
+  nx            = round(N*dt/period);
+  ny            = floor(N/(2*nx));
+  n             = nx*ny;
+  to_be_plotted = to_be_plotted(1:n);
+  to_be_plotted = reshape(to_be_plotted,nx,ny)';
+
+  xs = [0:(nx-1)]*spectrum_freqs(2)*period;
+  ys = [0:(ny-1)];
+
+  % Plot up the FFT
   figure(fig_handles(fig_no));
+  imagesc(xs, ys, to_be_plotted);
+  xlabel('Frequency*P');
+  ylabel('Harmonic Number');
+  axis("xy");
+  colormap("gray");
 
 end % function
 
@@ -699,11 +760,13 @@ function calc_fft()
   global timeseries
   global flattened
   global dt
+  global period
 
   global spectrum_freqs
   global spectrum_vals
 
   global zeromean
+  global zeropad
   global only_visible
   global apply_hamming
   global apply_hanning
@@ -725,13 +788,21 @@ function calc_fft()
     to_be_ffted = to_be_ffted([min_idx:max_idx]);
   end % if
 
-  % Get the length of the timeseries to be FFT'd
-  n  = length(to_be_ffted);
-
   % Apply zeromean
   if (zeromean)
     to_be_ffted = to_be_ffted - mean(to_be_ffted);
   end % if
+
+  % Apply zero-pad
+  if (zeropad)
+    n = length(to_be_ffted);
+    np = period / dt; % Number of bins per pulse
+    n_extra_zeros = round(ceil(n/np)*np) - n;
+    to_be_ffted = [to_be_ffted; zeros(n_extra_zeros,1)];
+  end % if
+
+  % Get the length of the timeseries to be FFT'd
+  n  = length(to_be_ffted);
 
   % Apply Hamming window
   if (apply_hamming)
