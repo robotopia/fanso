@@ -13,6 +13,7 @@ function fanso()
   global dt;
   global timeseries;
   global flattened;           % timeseries flattened by linear detrending between breakpoints
+  global timeseries_grid;     % timeseries recase into a grid (one pulse per row)
   global breakpoint_mask;     % 0 = do not use this value in calculating linear trends; 1 = use this value
   global profile_mask;
   global fft_plot_type;       % 0 = amplitudes;  1 = power
@@ -847,12 +848,7 @@ function plot_waterfall(src, data)
 
   global fig_handles
 
-  global dt
-  global period
-  global timeseries
-  global flattened
-
-  global apply_bps
+  global timeseries_grid
 
   global waterfall_plot_type
   global waterfall_cmin
@@ -867,6 +863,49 @@ function plot_waterfall(src, data)
   end % if
 
   figure(fig_handles(fig_no));
+
+  reshape_timeseries_into_grid();
+
+  % Get appropriate values for x and y axes
+  nxs = columns(timeseries_grid);
+  nys =    rows(timeseries_grid);
+
+  xs = [0:(nxs-1)] / nxs;  % Phase
+  ys = [1:nys];            % Pulse number
+
+  switch waterfall_plot_type
+    case 0 % 2D
+      imagesc(xs, ys, timeseries_grid);
+      colormap("gray");
+      axis("xy");
+      colorbar();
+      if (~isempty(waterfall_cmin) && ~isempty(waterfall_cmax))
+        caxis([waterfall_cmin, waterfall_cmax]);
+      end % if
+    case 1 % 3D
+      [Xs, Ys] = meshgrid(xs, ys);
+      waterfall(Xs, Ys, timeseries_grid);
+      colormap([0,0,0]); % i.e. all black lines
+    otherwise
+      error("Unknown waterfall plot type requested");
+  end % switch
+
+  xlabel('Phase')
+  ylabel('Pulse number');
+
+end % function
+
+function reshape_timeseries_into_grid()
+
+  global timeseries
+  global flattened
+  global timeseries_grid
+
+  global period
+  global dt
+
+
+  global apply_bps
 
   % Make sure there is a period
   if (isempty(period))
@@ -887,33 +926,7 @@ function plot_waterfall(src, data)
   phase_bin = floor(mod(t,period)/dt) + 1; % The "floor" here is problematic. It means some of the pulses
                                            % may be shifted by up to dt/2. I see no other way around this.
   accum_subs = [pulse_no, phase_bin];
-  to_be_plotted_grid = accumarray(accum_subs, to_be_plotted);
-
-  nxs = columns(to_be_plotted_grid);
-  nys =    rows(to_be_plotted_grid);
-
-  xs = [0:(nxs-1)] / nxs;  % Phase
-  ys = [1:nys];            % Pulse number
-
-  switch waterfall_plot_type
-    case 0 % 2D
-      imagesc(xs, ys, to_be_plotted_grid);
-      colormap("gray");
-      axis("xy");
-      colorbar();
-      if (~isempty(waterfall_cmin) && ~isempty(waterfall_cmax))
-        caxis([waterfall_cmin, waterfall_cmax]);
-      end % if
-    case 1 % 3D
-      [Xs, Ys] = meshgrid(xs, ys);
-      waterfall(Xs, Ys, to_be_plotted_grid);
-      colormap([0,0,0]); % i.e. all black lines
-    otherwise
-      error("Unknown waterfall plot type requested");
-  end % switch
-
-  xlabel('Phase')
-  ylabel('Pulse number');
+  timeseries_grid = accumarray(accum_subs, to_be_plotted);
 
 end % function
 
