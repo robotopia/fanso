@@ -95,8 +95,10 @@ function save_fan(src, data)
   global breakpoints
   global nprofile_bins
   global period
-  global hrfc_cmin
-  global hrfc_cmax
+  global hrfs_cmin
+  global hrfs_cmax
+  global waterfall_cmin
+  global waterfall_cmax
 
   % Open up a Save File dialog box
   [savefile, savepath, fltidx] = uiputfile({"*.fan", "FANSO file"});
@@ -117,8 +119,10 @@ function save_fan(src, data)
         "breakpoints", ...
         "nprofile_bins", ...
         "period", ...
-        "hrfc_cmin", ...
-        "hrfc_cmax");
+        "hrfs_cmin", ...
+        "hrfs_cmax", ...
+        "waterfall_cmin", ...
+        "waterfall_cmax");
 
 end % function
 
@@ -139,8 +143,10 @@ function load_fan(src, data)
   global breakpoints
   global nprofile_bins
   global period
-  global hrfc_cmin
-  global hrfc_cmax
+  global hrfs_cmin
+  global hrfs_cmax
+  global waterfall_cmin
+  global waterfall_cmax
 
   % Open up an Open File dialog box
   [loadfile, loadpath, fltidx] = uigetfile({"*.fan", "FANSO file"});
@@ -464,15 +470,15 @@ function create_figure(src, data, fig_no)
 
       m_hrfs_dynamicrange          = uimenu('label', '&Dynamic range');
       m_hrfs_dynamicrange_change   = uimenu(m_hrfs_dynamicrange, 'label', 'Set dynamic range limits', ...
-                                                                 'callback', {@change_dynamic_range, 0, 0});
+                                                                 'callback', {@change_dynamic_range, fig_no, 0, 0});
       m_hrfs_dynamicrange_incmax   = uimenu(m_hrfs_dynamicrange, 'label', 'Increase Max by 10% of range', 'accelerator', '+', ...
-                                              'separator', 'on', 'callback', {@change_dynamic_range, 0,  0.1});
+                                              'separator', 'on', 'callback', {@change_dynamic_range, fig_no, 0,  0.1});
       m_hrfs_dynamicrange_decmax   = uimenu(m_hrfs_dynamicrange, 'label', 'Decrease Max by 10% of range', 'accelerator', '_', ...
-                                                                 'callback', {@change_dynamic_range, 0, -0.1});
+                                                                 'callback', {@change_dynamic_range, fig_no, 0, -0.1});
       m_hrfs_dynamicrange_incmin   = uimenu(m_hrfs_dynamicrange, 'label', 'Increase Min by 10% of range', 'accelerator', '=', ...
-                                                                 'callback', {@change_dynamic_range,  0.1, 0});
+                                                                 'callback', {@change_dynamic_range, fig_no,  0.1, 0});
       m_hrfs_dynamicrange_decmin   = uimenu(m_hrfs_dynamicrange, 'label', 'Decrease Min by 10% of range', 'accelerator', '-', ...
-                                                                 'callback', {@change_dynamic_range, -0.1, 0});
+                                                                 'callback', {@change_dynamic_range, fig_no, -0.1, 0});
 
     case 5 % The waterfall plot of the timeseries
       fig_handles(fig_no) = figure("Name", "Waterfall plot", ...
@@ -482,11 +488,32 @@ function create_figure(src, data, fig_no)
       % Set up menu for waterfall figure %
       %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-      m_waterfallplot           = uimenu('label', '&Waterfall plot');
-      m_waterfallplot_2D        = uimenu(m_waterfallplot, 'label', '2D', 'accelerator', '2', ...
-                                                          'callback', {@set_waterfall_plot_type, 0});
-      m_waterfallplot_3D        = uimenu(m_waterfallplot, 'label', '3D', 'accelerator', '2', ...
-                                                          'callback', {@set_waterfall_plot_type, 1});
+      m_waterfall           = uimenu('label', '&Waterfall plot');
+      m_waterfall_2D        = uimenu(m_waterfall, 'label', '2D', 'accelerator', '2', ...
+                                                  'callback', {@set_waterfall_plot_type, 0});
+      m_waterfall_3D        = uimenu(m_waterfall, 'label', '3D', 'accelerator', '3', ...
+                                                  'callback', {@set_waterfall_plot_type, 1});
+      m_waterfall_dynamicrange        = uimenu('label', '&Dynamic range');
+      m_waterfall_dynamicrange_change = uimenu(m_waterfall_dynamicrange, ...
+                                               'label', 'Set dynamic range limits', ...
+                                               'callback', {@change_dynamic_range, fig_no, 0, 0});
+      m_waterfall_dynamicrange_incmax = uimenu(m_waterfall_dynamicrange, ...
+                                               'label', 'Increase Max by 10% of range', ...
+                                               'accelerator', '+', 'separator', 'on', ...
+                                               'callback', {@change_dynamic_range, fig_no, 0,  0.1});
+      m_waterfall_dynamicrange_decmax = uimenu(m_waterfall_dynamicrange, ...
+                                               'label', 'Decrease Max by 10% of range', ...
+                                               'accelerator', '_', ...
+                                               'callback', {@change_dynamic_range, fig_no, 0, -0.1});
+      m_waterfall_dynamicrange_incmin = uimenu(m_waterfall_dynamicrange,
+                                               'label', 'Increase Min by 10% of range', ...
+                                               'accelerator', '=', ...
+                                               'callback', {@change_dynamic_range, fig_no,  0.1, 0});
+      m_waterfall_dynamicrange_decmin = uimenu(m_waterfall_dynamicrange, ...
+                                               'label', 'Decrease Min by 10% of range', ...
+                                               'accelerator', '-', ...
+                                               'callback', {@change_dynamic_range, fig_no, -0.1, 0});
+
 
   end % switch
 
@@ -497,25 +524,41 @@ function set_waterfall_plot_type(src, data, newvalue)
   global waterfall_plot_type
 
   waterfall_plot_type = newvalue;
-  replot_all();
+  plot_waterfall();
 
 end % function
 
-function change_dynamic_range(src, data, minfactor, maxfactor)
+function change_dynamic_range(src, data, fig_no, minfactor, maxfactor)
 
-  global hrfc_cmin
-  global hrfc_cmax
+  global hrfs_cmin
+  global hrfs_cmax
+
+  global waterfall_cmin
+  global waterfall_cmax
 
   if (all(~[minfactor, maxfactor]))
-    cstrs = inputdlg({"Min:", "Max:"}, "Enter new dynamic range limits", 1, {num2str(hrfc_cmin), num2str(hrfc_cmax)});
+    cstrs = inputdlg({"Min:", "Max:"}, "Enter new dynamic range limits", 1, {num2str(hrfs_cmin), num2str(hrfs_cmax)});
     if (~isempty(cstrs))
-      hrfc_cmin = str2num(cstrs{1});
-      hrfc_cmax = str2num(cstrs{2});
+      switch fig_no
+        case 4 % HRFS
+          hrfs_cmin = str2num(cstrs{1});
+          hrfs_cmax = str2num(cstrs{2});
+        case 5 % Waterfall plot
+          waterfall_cmin = str2num(cstrs{1});
+          waterfall_cmax = str2num(cstrs{2});
+      end % switch
     end % if
   else
-    crange = hrfc_cmax - hrfc_cmin;
-    hrfc_cmin = hrfc_cmin + crange*minfactor;
-    hrfc_cmax = hrfc_cmax + crange*maxfactor;
+    switch fig_no
+      case 4 % HRFS
+        crange = hrfs_cmax - hrfs_cmin;
+        hrfs_cmin = hrfs_cmin + crange*minfactor;
+        hrfs_cmax = hrfs_cmax + crange*maxfactor;
+      case 5 % Waterfall plot
+        crange = waterfall_cmax - waterfall_cmin;
+        waterfall_cmin = waterfall_cmin + crange*minfactor;
+        waterfall_cmax = waterfall_cmax + crange*minfactor;
+    end % switch
   end % if
 
   replot_all();
@@ -743,8 +786,8 @@ function plot_hrfs(src, data)
   global spectrum_freqs
   global spectrum_vals
 
-  global hrfc_cmin
-  global hrfc_cmax
+  global hrfs_cmin
+  global hrfs_cmax
 
   % Switch to/Create HRFS figure and keep track of the view window
   fig_no = 4;
@@ -784,8 +827,8 @@ function plot_hrfs(src, data)
   axis("xy");
   colormap("gray");
   colorbar('ylabel', 'Amplitude');
-  if (~isempty(hrfc_cmin) && ~isempty(hrfc_cmax))
-    caxis([hrfc_cmin, hrfc_cmax]);
+  if (~isempty(hrfs_cmin) && ~isempty(hrfs_cmax))
+    caxis([hrfs_cmin, hrfs_cmax]);
   end % if
 
 end % function
@@ -802,6 +845,8 @@ function plot_waterfall(src, data)
   global apply_bps
 
   global waterfall_plot_type
+  global waterfall_cmin
+  global waterfall_cmax
 
   % Switch to/Create HRFS figure and keep track of the view window
   fig_no = 5;
@@ -837,8 +882,8 @@ function plot_waterfall(src, data)
   nxs = columns(to_be_plotted_grid);
   nys =    rows(to_be_plotted_grid);
 
-  xs = [0:(nxs-1)] / nxs;
-  ys = [0:(nys-1)] / nys;
+  xs = [0:(nxs-1)] / nxs;  % Phase
+  ys = [1:nys];            % Pulse number
 
   switch waterfall_plot_type
     case 0 % 2D
@@ -846,6 +891,9 @@ function plot_waterfall(src, data)
       colormap("gray");
       axis("xy");
       colorbar();
+      if (~isempty(waterfall_cmin) && ~isempty(waterfall_cmax))
+        caxis([waterfall_cmin, waterfall_cmax]);
+      end % if
     case 1 % 3D
       [Xs, Ys] = meshgrid(xs, ys);
       waterfall(Xs, Ys, to_be_plotted_grid);
