@@ -12,10 +12,11 @@ function fanso()
 
   global dt;
   global timeseries;
-  global flattened;  % timeseries flattened by linear detrending between breakpoints
-  global breakpoint_mask;   % 0 = do not use this value in calculating linear trends; 1 = use this value
+  global flattened;           % timeseries flattened by linear detrending between breakpoints
+  global breakpoint_mask;     % 0 = do not use this value in calculating linear trends; 1 = use this value
   global profile_mask;
-  global fft_plot_type;
+  global fft_plot_type;       % 0 = amplitudes;  1 = power
+  global waterfall_plot_type; % 0 = 2D color;  1 = 3D heights
 
   % Variables for the size and position of the figure windows
   global screensize;
@@ -40,14 +41,16 @@ function fanso()
                              % (2) = FFT plot
                              % (3) = profile plot
                              % (4) = harmonic resolved fluctuation spectrum plot
-  fig_functions = {@plot_timeseries, @plot_fft, @plot_profile, @plot_hrfs};
+                             % (5) = waterfall plot of timeseries modulo period
+  fig_functions = {@plot_timeseries, @plot_fft, @plot_profile, @plot_hrfs, @plot_waterfall};
 
-  timeseries        = zeros(100,1);
-  dt                = 1;
-  flattened         = timeseries;
-  breakpoint_mask   = ones(size(timeseries));
-  profile_mask      = [0,0];
-  fft_plot_type     = 0; % 0 = abs(fft);  1 = power spectrum
+  timeseries          = zeros(100,1);
+  dt                  = 1;
+  flattened           = timeseries;
+  breakpoint_mask     = ones(size(timeseries));
+  profile_mask        = [0,0];
+  fft_plot_type       = 0;
+  waterfall_plot_type = 0;
 
   screensize = get(0, 'screensize');
   gapsize    = 100;
@@ -92,8 +95,8 @@ function save_fan(src, data)
   global breakpoints
   global nprofile_bins
   global period
-  global cmin
-  global cmax
+  global hrfc_cmin
+  global hrfc_cmax
 
   % Open up a Save File dialog box
   [savefile, savepath, fltidx] = uiputfile({"*.fan", "FANSO file"});
@@ -114,8 +117,8 @@ function save_fan(src, data)
         "breakpoints", ...
         "nprofile_bins", ...
         "period", ...
-        "cmin", ...
-        "cmax");
+        "hrfc_cmin", ...
+        "hrfc_cmax");
 
 end % function
 
@@ -136,8 +139,8 @@ function load_fan(src, data)
   global breakpoints
   global nprofile_bins
   global period
-  global cmin
-  global cmax
+  global hrfc_cmin
+  global hrfc_cmax
 
   % Open up an Open File dialog box
   [loadfile, loadpath, fltidx] = uigetfile({"*.fan", "FANSO file"});
@@ -413,6 +416,7 @@ function create_figure(src, data, fig_no)
       m_profile_setnbins   = uimenu(m_profile, 'label', '&Set no. profile bins', 'callback', @get_nbins_from_user);
       m_profile_plot       = uimenu(m_profile, 'label', '&Plot profile', 'separator', 'on', ...
                                                'accelerator', 'p', 'callback', @plot_profile);
+      m_profile_waterfall  = uimenu(m_profile, 'label', 'Plot &waterfall', 'callback', @plot_waterfall);
 
     case 2 % The FFT figure
       global screensize
@@ -432,8 +436,8 @@ function create_figure(src, data, fig_no)
       %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
       m_fftplot           = uimenu('label', 'FF&T');
-      m_fftplot_abs       = uimenu(m_fftplot, 'label', 'Absolute value', 'callback', {@change_fft_plot_type, 0});
-      m_fftplot_abs       = uimenu(m_fftplot, 'label', 'Power', 'callback', {@change_fft_plot_type, 1});
+      m_fftplot_abs       = uimenu(m_fftplot, 'label', 'Absolute value', 'callback', {@set_fft_plot_type, 0});
+      m_fftplot_abs       = uimenu(m_fftplot, 'label', 'Power', 'callback', {@set_fft_plot_type, 1});
 
       m_fftanalyse        = uimenu('label', '&Analyse');
       m_fftanalyse_period = uimenu(m_fftanalyse, 'label', '&Select period (P1)', 'callback', @select_period);
@@ -470,25 +474,48 @@ function create_figure(src, data, fig_no)
       m_hrfs_dynamicrange_decmin   = uimenu(m_hrfs_dynamicrange, 'label', 'Decrease Min by 10% of range', 'accelerator', '-', ...
                                                                  'callback', {@change_dynamic_range, -0.1, 0});
 
+    case 5 % The waterfall plot of the timeseries
+      fig_handles(fig_no) = figure("Name", "Waterfall plot", ...
+                                   "DeleteFcn", {@destroy_figure, fig_no});
+
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+      % Set up menu for waterfall figure %
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+      m_waterfallplot           = uimenu('label', '&Waterfall plot');
+      m_waterfallplot_2D        = uimenu(m_waterfallplot, 'label', '2D', 'accelerator', '2', ...
+                                                          'callback', {@set_waterfall_plot_type, 0});
+      m_waterfallplot_3D        = uimenu(m_waterfallplot, 'label', '3D', 'accelerator', '2', ...
+                                                          'callback', {@set_waterfall_plot_type, 1});
+
   end % switch
+
+end % function
+
+function set_waterfall_plot_type(src, data, newvalue)
+
+  global waterfall_plot_type
+
+  waterfall_plot_type = newvalue;
+  replot_all();
 
 end % function
 
 function change_dynamic_range(src, data, minfactor, maxfactor)
 
-  global cmin
-  global cmax
+  global hrfc_cmin
+  global hrfc_cmax
 
   if (all(~[minfactor, maxfactor]))
-    cstrs = inputdlg({"Min:", "Max:"}, "Enter new dynamic range limits", 1, {num2str(cmin), num2str(cmax)});
+    cstrs = inputdlg({"Min:", "Max:"}, "Enter new dynamic range limits", 1, {num2str(hrfc_cmin), num2str(hrfc_cmax)});
     if (~isempty(cstrs))
-      cmin = str2num(cstrs{1});
-      cmax = str2num(cstrs{2});
+      hrfc_cmin = str2num(cstrs{1});
+      hrfc_cmax = str2num(cstrs{2});
     end % if
   else
-    crange = cmax - cmin;
-    cmin = cmin + crange*minfactor;
-    cmax = cmax + crange*maxfactor;
+    crange = hrfc_cmax - hrfc_cmin;
+    hrfc_cmin = hrfc_cmin + crange*minfactor;
+    hrfc_cmax = hrfc_cmax + crange*maxfactor;
   end % if
 
   replot_all();
@@ -607,6 +634,8 @@ function plot_fft(src, data)
     create_figure(0,0,fig_no);
   end % if
 
+  figure(fig_handles(fig_no));
+
   % Calculate the FFT
   calc_fft();
 
@@ -714,8 +743,8 @@ function plot_hrfs(src, data)
   global spectrum_freqs
   global spectrum_vals
 
-  global cmin
-  global cmax
+  global hrfc_cmin
+  global hrfc_cmax
 
   % Switch to/Create HRFS figure and keep track of the view window
   fig_no = 4;
@@ -724,6 +753,8 @@ function plot_hrfs(src, data)
   if (first_time)
     create_figure(0,0,fig_no);
   end % if
+
+  figure(fig_handles(fig_no));
 
   % Turn on zero-padding
   if (~zeropad)
@@ -753,9 +784,78 @@ function plot_hrfs(src, data)
   axis("xy");
   colormap("gray");
   colorbar('ylabel', 'Amplitude');
-  if (~isempty(cmin) && ~isempty(cmax))
-    caxis([cmin, cmax]);
+  if (~isempty(hrfc_cmin) && ~isempty(hrfc_cmax))
+    caxis([hrfc_cmin, hrfc_cmax]);
   end % if
+
+end % function
+
+function plot_waterfall(src, data)
+
+  global fig_handles
+
+  global dt
+  global period
+  global timeseries
+  global flattened
+
+  global apply_bps
+
+  global waterfall_plot_type
+
+  % Switch to/Create HRFS figure and keep track of the view window
+  fig_no = 5;
+  first_time = (fig_handles(fig_no) == 0);
+
+  if (first_time)
+    create_figure(0,0,fig_no);
+  end % if
+
+  figure(fig_handles(fig_no));
+
+  % Make sure there is a period
+  if (isempty(period))
+    get_period_from_user();
+  end % if
+
+  % Get the appropriate timeseries
+  if (apply_bps)
+    to_be_plotted = flattened;
+  else
+    to_be_plotted = timeseries;
+  end % if
+
+  % Prepare the grid of values
+  N         = length(to_be_plotted);
+  t         = ([1:N]' - 0.5) * dt; % -0.5 is to avoid some of the more common computer precision errors
+  pulse_no  = floor(t/period) + 1;
+  phase_bin = floor(mod(t,period)/dt) + 1; % The "floor" here is problematic. It means some of the pulses
+                                           % may be shifted by up to dt/2. I see no other way around this.
+  accum_subs = [pulse_no, phase_bin];
+  to_be_plotted_grid = accumarray(accum_subs, to_be_plotted);
+
+  nxs = columns(to_be_plotted_grid);
+  nys =    rows(to_be_plotted_grid);
+
+  xs = [0:(nxs-1)] / nxs;
+  ys = [0:(nys-1)] / nys;
+
+  switch waterfall_plot_type
+    case 0 % 2D
+      imagesc(xs, ys, to_be_plotted_grid);
+      colormap("gray");
+      axis("xy");
+      colorbar();
+    case 1 % 3D
+      [Xs, Ys] = meshgrid(xs, ys);
+      waterfall(Xs, Ys, to_be_plotted_grid);
+      colormap([0,0,0]); % i.e. all black lines
+    otherwise
+      error("Unknown waterfall plot type requested");
+  end % switch
+
+  xlabel('Phase')
+  ylabel('Pulse number');
 
 end % function
 
@@ -979,7 +1079,7 @@ function flatten()
 
 end % function
 
-function change_fft_plot_type(src, data, newvalue)
+function set_fft_plot_type(src, data, newvalue)
 
   global fft_plot_type
   fft_plot_type = newvalue;
