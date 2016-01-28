@@ -541,18 +541,23 @@ function change_dynamic_range(src, data, fig_no, minfactor, maxfactor)
   global waterfall_cmin
   global waterfall_cmax
 
-  if (all(~[minfactor, maxfactor]))
-    cstrs = inputdlg({"Min:", "Max:"}, "Enter new dynamic range limits", 1, {num2str(hrfs_cmin), num2str(hrfs_cmax)});
-    if (~isempty(cstrs))
-      switch fig_no
-        case 4 % HRFS
+  if (all(~[minfactor, maxfactor])) % Putting in zeros for these parameters brings up a dialog box
+    switch fig_no
+      case 4 % HRFS
+        cstrs = inputdlg({"Min:", "Max:"}, "Enter new dynamic range limits", ...
+                         1, {num2str(hrfs_cmin), num2str(hrfs_cmax)});
+        if (~isempty(cstrs))
           hrfs_cmin = str2num(cstrs{1});
           hrfs_cmax = str2num(cstrs{2});
-        case 5 % Waterfall plot
+        end % if
+      case 5 % Waterfall plot
+        cstrs = inputdlg({"Min:", "Max:"}, "Enter new dynamic range limits", ...
+                         1, {num2str(waterfall_cmin), num2str(waterfall_cmax)});
+        if (~isempty(cstrs))
           waterfall_cmin = str2num(cstrs{1});
           waterfall_cmax = str2num(cstrs{2});
-      end % switch
-    end % if
+        end % if
+    end % switch
   else
     switch fig_no
       case 4 % HRFS
@@ -562,7 +567,7 @@ function change_dynamic_range(src, data, fig_no, minfactor, maxfactor)
       case 5 % Waterfall plot
         crange = waterfall_cmax - waterfall_cmin;
         waterfall_cmin = waterfall_cmin + crange*minfactor;
-        waterfall_cmax = waterfall_cmax + crange*minfactor;
+        waterfall_cmax = waterfall_cmax + crange*maxfactor;
     end % switch
   end % if
 
