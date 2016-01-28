@@ -92,6 +92,8 @@ function save_fan(src, data)
   global breakpoints
   global nprofile_bins
   global period
+  global cmin
+  global cmax
 
   % Open up a Save File dialog box
   [savefile, savepath, fltidx] = uiputfile({"*.fan", "FANSO file"});
@@ -111,7 +113,9 @@ function save_fan(src, data)
         "apply_bps", ...
         "breakpoints", ...
         "nprofile_bins", ...
-        "period");
+        "period", ...
+        "cmin", ...
+        "cmax");
 
 end % function
 
@@ -132,6 +136,8 @@ function load_fan(src, data)
   global breakpoints
   global nprofile_bins
   global period
+  global cmin
+  global cmax
 
   % Open up an Open File dialog box
   [loadfile, loadpath, fltidx] = uigetfile({"*.fan", "FANSO file"});
@@ -205,10 +211,13 @@ function change_dt(src, data)
 
   global dt;
 
+  % Read in the new value via a dialog box
   cstr = inputdlg("Please enter the timestep in seconds:", "Set timestep");
-  dt   = str2num(cstr{1});
 
-  replot_all([1,0,0]);
+  if (~isempty(cstr))
+    dt   = str2num(cstr{1});
+    replot_all([1,0,0]);
+  end % if
 
 end % function
 
@@ -472,8 +481,10 @@ function change_dynamic_range(src, data, minfactor, maxfactor)
 
   if (all(~[minfactor, maxfactor]))
     cstrs = inputdlg({"Min:", "Max:"}, "Enter new dynamic range limits", 1, {num2str(cmin), num2str(cmax)});
-    cmin = str2num(cstrs{1});
-    cmax = str2num(cstrs{2});
+    if (~isempty(cstrs))
+      cmin = str2num(cstrs{1});
+      cmax = str2num(cstrs{2});
+    end % if
   else
     crange = cmax - cmin;
     cmin = cmin + crange*minfactor;
@@ -630,14 +641,16 @@ function select_period(src, data)
 
   [x, y, button] = ginput(1);
 
+  % Get the harmonic number via a dialog box
   cstr = inputdlg({"Harmonic number of selected point:"}, "Harmonic", 1, {"1"});
-  nharm = str2num(cstr{1});
+  if (~isempty(cstr))
+    nharm = str2num(cstr{1});
+    period = nharm/x;
+    replot_all();
+  end % if
 
-  period = nharm/x;
-
+  % Reset title
   title("");
-
-  replot_all();
 
 end % function
 
@@ -908,16 +921,24 @@ function calc_profile()
 
 end % function
 
-function res = get_period_from_user(src, data)
+function get_period_from_user(src, data)
   global period
-  user_input = inputdlg({"Enter period in seconds:"}, "Period", 1, {num2str(period)});
-  period = str2num(user_input{1});
+  cstr = inputdlg({"Enter period in seconds:"}, "Period", 1, {num2str(period)});
+  if (~isempty(cstr))
+    period = str2num(cstr{1});
+  end % if
 end % function
 
-function res = get_nbins_from_user(src, data)
+function get_nbins_from_user(src, data)
   global nprofile_bins
-  user_input = inputdlg({"Enter number of bins:"}, "Profile bins", 1, {num2str(nprofile_bins)});
-  nprofile_bins = str2num(user_input{1});
+  cstr = inputdlg({"Enter number of bins:"}, "Profile bins", 1, {num2str(nprofile_bins)});
+  if (~isempty(cstr))
+    nprofile_bins = str2num(cstr{1});
+    if (mod(nprofile_bins,1) ~= 0) % If they don't input a whole number
+      nprofile_bins = round(nprofile_bins);
+      errordlg(sprintf('Rounding %s to %d', cstr, nprofile_bins));
+    end % if
+  end % if
 end % function
 
 function flatten()
