@@ -326,7 +326,7 @@ function add_breakpoints(src, data)
           breakpoints = setdiff(breakpoints, breakpoints(nearest_idx));
         end
     end % switch
-    plot_timeseries();
+    replot_all();
   until (button == 115) % 115='s'
   title('');
 
@@ -364,7 +364,8 @@ function create_figure(src, data, fig_no)
       winpos_x   = gapsize;
       winpos_y   = 2*gapsize + winsize_y;
 
-      fig_handles(fig_no) = figure("Position", [winpos_x, winpos_y, winsize_x, winsize_y], ...
+      fig_handles(fig_no) = figure("Name", "Timeseries", ...
+                                   "Position", [winpos_x, winpos_y, winsize_x, winsize_y], ...
                                    "DeleteFcn", {@destroy_figure, fig_no});
 
       %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -413,7 +414,8 @@ function create_figure(src, data, fig_no)
       winpos_x   = gapsize;
       winpos_y   = gapsize;
 
-      fig_handles(fig_no) = figure("Position", [winpos_x, winpos_y, winsize_x, winsize_y], ...
+      fig_handles(fig_no) = figure("Name", "Fourier Transform", ...
+                                   "Position", [winpos_x, winpos_y, winsize_x, winsize_y], ...
                                    "DeleteFcn", {@destroy_figure, fig_no});
 
       %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -428,7 +430,8 @@ function create_figure(src, data, fig_no)
       m_fftanalyse_period = uimenu(m_fftanalyse, 'label', '&Select period (P1)', 'callback', @select_period);
 
     case 3 % The profile figure
-      fig_handles(fig_no) = figure("DeleteFcn", {@destroy_figure, fig_no});
+      fig_handles(fig_no) = figure("Name", "Profile", ...
+                                   "DeleteFcn", {@destroy_figure, fig_no});
 
       %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
       % Set up menu for profile figure %
@@ -439,8 +442,45 @@ function create_figure(src, data, fig_no)
       m_mask_select = uimenu(m_mask, 'label', '&Select', 'callback', @select_mask);
 
     case 4 % The harmonic resolved fluctuation spectrum figure
-      fig_handles(fig_no) = figure("DeleteFcn", {@destroy_figure, fig_no});
+      fig_handles(fig_no) = figure("Name", "Harmonic Resolved Fluctuation Spectrum", ...
+                                   "DeleteFcn", {@destroy_figure, fig_no});
+
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+      % Set up menu for HRFS figure %
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+      m_hrfs_dynamicrange          = uimenu('label', '&Dynamic range');
+      m_hrfs_dynamicrange_change   = uimenu(m_hrfs_dynamicrange, 'label', 'Set dynamic range limits', ...
+                                                                 'callback', {@change_dynamic_range, 0, 0});
+      m_hrfs_dynamicrange_incmax   = uimenu(m_hrfs_dynamicrange, 'label', 'Increase Max by 10% of range', 'accelerator', '+', ...
+                                              'separator', 'on', 'callback', {@change_dynamic_range, 0,  0.1});
+      m_hrfs_dynamicrange_decmax   = uimenu(m_hrfs_dynamicrange, 'label', 'Decrease Max by 10% of range', 'accelerator', '_', ...
+                                                                 'callback', {@change_dynamic_range, 0, -0.1});
+      m_hrfs_dynamicrange_incmin   = uimenu(m_hrfs_dynamicrange, 'label', 'Increase Min by 10% of range', 'accelerator', '=', ...
+                                                                 'callback', {@change_dynamic_range,  0.1, 0});
+      m_hrfs_dynamicrange_decmin   = uimenu(m_hrfs_dynamicrange, 'label', 'Decrease Min by 10% of range', 'accelerator', '-', ...
+                                                                 'callback', {@change_dynamic_range, -0.1, 0});
+
   end % switch
+
+end % function
+
+function change_dynamic_range(src, data, minfactor, maxfactor)
+
+  global cmin
+  global cmax
+
+  if (all(~[minfactor, maxfactor]))
+    cstrs = inputdlg({"Min:", "Max:"}, "Enter new dynamic range limits", 1, {num2str(cmin), num2str(cmax)});
+    cmin = str2num(cstrs{1});
+    cmax = str2num(cstrs{2});
+  else
+    crange = cmax - cmin;
+    cmin = cmin + crange*minfactor;
+    cmax = cmax + crange*maxfactor;
+  end % if
+
+  replot_all();
 
 end % function
 
@@ -563,8 +603,10 @@ function plot_fft(src, data)
   switch fft_plot_type
     case 0 % Plot absolute values
       to_be_plotted = abs(spectrum_vals);
+      ylabel_text = 'Amplitude';
     case 1 % Plot power spectrum
       to_be_plotted = abs(spectrum_vals).^2;
+      ylabel_text = 'Power';
     otherwise
       error("Unknown FFT plot type");
   end % switch
@@ -573,7 +615,7 @@ function plot_fft(src, data)
   figure(fig_handles(fig_no));
   plot(spectrum_freqs, to_be_plotted, 'b');
   xlabel('Frequency (Hz)');
-  ylabel('Power');
+  ylabel(ylabel_text);
 
 end % function
 
@@ -659,6 +701,9 @@ function plot_hrfs(src, data)
   global spectrum_freqs
   global spectrum_vals
 
+  global cmin
+  global cmax
+
   % Switch to/Create HRFS figure and keep track of the view window
   fig_no = 4;
   first_time = (fig_handles(fig_no) == 0);
@@ -694,6 +739,10 @@ function plot_hrfs(src, data)
   ylabel('Harmonic Number');
   axis("xy");
   colormap("gray");
+  colorbar('ylabel', 'Amplitude');
+  if (~isempty(cmin) && ~isempty(cmax))
+    caxis([cmin, cmax]);
+  end % if
 
 end % function
 
@@ -937,7 +986,8 @@ function replot_all(rescale = [0,0,0,0,0,0,0,0,0,0])
         ax = axis();
         fig_functions{fig_no}();
         figure(h);
-        xlim([ax(1), ax(2)]);
+        %xlim([ax(1), ax(2)]);
+        axis(ax);
       else
         fig_functions{fig_no}();
       end % if
