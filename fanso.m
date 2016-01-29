@@ -10,12 +10,12 @@ function fanso()
   % Global variables that need initialising %
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-  global dt;
-  global timeseries;
+  global dt;                  % the time between samples in the timeseries (in seconds)
+  global timeseries;          % the original timeseries
   global flattened;           % timeseries flattened by linear detrending between breakpoints
   global timeseries_grid;     % timeseries recase into a grid (one pulse per row)
   global breakpoint_mask;     % 0 = do not use this value in calculating linear trends; 1 = use this value
-  global profile_mask;
+  global profile_mask;        % A pair of phases that define a region of phases to be ignored in the breakpoint linear fits
   global fft_plot_type;       % 0 = amplitudes;  1 = power
   global waterfall_plot_type; % 0 = 2D color;  1 = 3D heights
 
@@ -199,32 +199,34 @@ function import_timeseries(src, data)
   % Get file from Open File dialog box
   [loadfile, loadpath, fltidx] = uigetfile();
 
-  try
-    mat = load("-ascii", [loadpath, loadfile]);
+  if (loadfile ~= 0) % The user has actually chosen a file
+    try
+      mat = load("-ascii", [loadpath, loadfile]);
 
-    if (~isvector(mat))
-      warndlg("Input file contains multiple columns.\nReading only the first column as timeseries.", ...
-              "Multiple columns detected");
-    end % if
+      if (~isvector(mat))
+        warndlg("Input file contains multiple columns.\nReading only the first column as timeseries.", ...
+                "Multiple columns detected");
+      end % if
 
-    timeseries = mat(:,1);
-    change_dt();
+      timeseries = mat(:,1);
+      change_dt();
 
-    flattened  = timeseries;
-    breakpoint_mask   = ones(size(timeseries));
-    profile_mask      = [0,0];
+      flattened  = timeseries;
+      breakpoint_mask   = ones(size(timeseries));
+      profile_mask      = [0,0];
 
-    zeromean      = 0;
-    zeropad       = 0;
-    only_visible  = 0;
-    apply_hamming = 0;
-    apply_hanning = 0;
-    apply_bps     = 0;
+      zeromean      = 0;
+      zeropad       = 0;
+      only_visible  = 0;
+      apply_hamming = 0;
+      apply_hanning = 0;
+      apply_bps     = 0;
 
-  catch
-    errordlg("This file is in an unreadable format.\nSee the '-ascii' option in Octave's load() function for details", ...
-             "Open file error");
-  end % try
+    catch
+      errordlg("This file is in an unreadable format.\nSee the '-ascii' option in Octave's load() function for details", ...
+               "Open file error");
+    end % try
+  end % if
 
 end % function
 
@@ -237,7 +239,7 @@ function change_dt(src, data)
 
   if (~isempty(cstr))
     dt   = str2num(cstr{1});
-    replot_all([1,0,0]);
+    replot_all([1,0,0,0,0,0,0,0,0,0]);
   end % if
 
 end % function
