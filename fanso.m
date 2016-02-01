@@ -947,6 +947,7 @@ function plot_tdfs(src, data)
   global fig_handles
 
   global timeseries_grid
+  global period
 
   global tdfs_cmin
   global tdfs_cmax
@@ -965,14 +966,17 @@ function plot_tdfs(src, data)
   reshape_timeseries_into_grid();
   tdfs = abs(fft2(timeseries_grid));
 
-  % Get appropriate values for x and y axes
-  % FIX ME! These aren't appropriate values!
-  nxs = columns(tdfs);
-  nys =    rows(tdfs);
+  % Chop off the right half (= conjugate of left half for real signal)
+  % and rotate vertically so that DC is in centre of grid
+  nxs = ceil((columns(tdfs)+1)/2);
+  nys = rows(tdfs);
+  tdfs = tdfs(:,1:nxs);
+  yshift = floor(nys/2);
+  tdfs = shift(tdfs, yshift);
 
-  xs = [0:(nxs-1)] / nxs;  % Phase
-  ys = [1:nys];            % Pulse number
-  % END FIX ME
+  xs = [0:(nxs-1)];                % Units of v_l * P1/(2*pi)
+  %xs = [0:(nxs-1)]/period;        % Units of v_l * 2*pi*P1 ??
+  ys = [-yshift:(yshift-1)] / nys;  % Units v_t * P1
 
   imagesc(xs, ys, tdfs);
   colormap("gray");
@@ -982,8 +986,8 @@ function plot_tdfs(src, data)
     caxis([tdfs_cmin, tdfs_cmax]);
   end % if
 
-  xlabel('Inverse Phase'); % <-- FIX ME TOO
-  ylabel('Inverse Pulse number'); % <-- FIX ME TOO
+  xlabel("2π ν_l P_1");
+  ylabel("ν_t P_1");
 
 end % function
 
