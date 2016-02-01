@@ -1,5 +1,5 @@
 function fanso()
-% -- Function: fanso (filename)
+% -- Function: fanso ()
 %     Analyse a timeseries using the Fourier ANalysis Suite for Octave.
 %     Requires FLTK.
 %
