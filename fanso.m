@@ -6,6 +6,8 @@ function fanso()
 %     Written by Sam McSweeney, 2016, Creative Commons Licence
 %     sammy.mcsweeney@gmail.com
 
+  clear -global
+
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   % Global variables that need initialising %
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -35,6 +37,9 @@ function fanso()
 
   % A global variable for the breakpoints
   global breakpoints;
+
+  % Load known pulsar periods
+  loadperiods();
 
   % Set initial values
   fig_handles = zeros(10,1); % 10 is arbitrary. Should be more than enough. Increase if needed.
@@ -434,6 +439,7 @@ function create_figure(src, data, fig_no)
       % The Profile menu
       m_profile            = uimenu('label', '&Profile');
       m_profile_setperiod  = uimenu(m_profile, 'label', '&Set period', 'callback', @get_period_from_user);
+      m_profile_selperiod  = uimenu(m_profile, 'label', 'Se&lect period from pulsar', 'callback', @select_pulsarperiod);
       m_profile_setnbins   = uimenu(m_profile, 'label', '&Set no. profile bins', 'callback', @get_nbins_from_user);
       m_profile_plot       = uimenu(m_profile, 'label', '&Plot profile', 'separator', 'on', ...
                                                'accelerator', 'p', 'callback', @plot_profile);
@@ -793,6 +799,16 @@ function plot_profile(src, data)
   global period
   global profile_mask
 
+  if (isempty(period))
+    errordlg('The period has not been set');
+    return
+  end % if
+
+  if (isempty(nprofile_bins))
+    errordlg('The number of profile bins has not been set');
+    return
+  end % if
+
   % Switch to/Create FFT figure and keep track of the view window
   fig_no = 3;
   first_time = (fig_handles(fig_no) == 0);
@@ -895,11 +911,18 @@ function plot_waterfall(src, data)
 
   global fig_handles
 
+  global period
   global timeseries_grid
 
   global waterfall_plot_type
   global waterfall_cmin
   global waterfall_cmax
+
+  % Make sure the period has been set
+  if (isempty(period))
+    errordlg('The period has not been set');
+    return
+  end % if
 
   % Switch to/Create HRFS figure and keep track of the view window
   fig_no = 5;
@@ -997,16 +1020,10 @@ function reshape_timeseries_into_grid()
   global flattened
   global timeseries_grid
 
-  global period
+  global period % Assumed to have been set by this point
   global dt
 
-
   global apply_bps
-
-  % Make sure there is a period
-  if (isempty(period))
-    get_period_from_user();
-  end % if
 
   % Get the appropriate timeseries
   if (apply_bps)
@@ -1164,14 +1181,6 @@ function calc_profile()
 
   global period
 
-  if (isempty(period))
-    get_period_from_user();
-  end % if
-
-  if (isempty(nprofile_bins))
-    get_nbins_from_user();
-  end % if
-
   % Use original or flattened, accordingly
   if (apply_bps)
     to_be_folded = flattened;
@@ -1189,15 +1198,22 @@ function calc_profile()
 end % function
 
 function get_period_from_user(src, data)
+
   global period
+
   cstr = inputdlg({"Enter period in seconds:"}, "Period", 1, {num2str(period)});
   if (~isempty(cstr))
     period = str2num(cstr{1});
   end % if
+
+  replot_all();
+
 end % function
 
 function get_nbins_from_user(src, data)
+
   global nprofile_bins
+
   cstr = inputdlg({"Enter number of bins:"}, "Profile bins", 1, {num2str(nprofile_bins)});
   if (~isempty(cstr))
     nprofile_bins = str2num(cstr{1});
@@ -1206,6 +1222,9 @@ function get_nbins_from_user(src, data)
       errordlg(sprintf('Rounding %s to %d', cstr, nprofile_bins));
     end % if
   end % if
+
+  replot_all();
+
 end % function
 
 function flatten()
@@ -1286,4 +1305,36 @@ function replot_all(rescale = [0,0,0,0,0,0,0,0,0,0])
 
 end % function
 
+function loadperiods()
 
+  global pulsarperiods
+
+  f = fopen('periods.dat');
+
+  % First, count the lines
+  nlines = fskipl(f, Inf);
+  frewind(f);
+
+  % Now read them in
+  pulsarperiods = cell(nlines, 2);
+  for n = 1:nlines
+    [pulsarperiods{n,1}, pulsarperiods{n,2}] = fscanf(f, '%s %f', "C");
+  end % for
+
+end % function
+
+function select_pulsarperiod(src, data)
+
+  global pulsarperiods
+  global period
+
+  names = pulsarperiods(:,1);
+
+  [sel, ok] = listdlg("ListString", names, "SelectionMode", "Single", "Name", "Select pulsar");
+  if (ok)
+    period = pulsarperiods{sel,2};
+  end % if
+
+  replot_all();
+
+end % function
