@@ -8,9 +8,9 @@ function fanso()
 
   clear -global
 
-  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-  % Global variables that need initialising %
-  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  % Global variables that need initialising upon program startup %
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
   global dt;                  % the time between samples in the timeseries (in seconds)
   global timeseries;          % the original timeseries
@@ -168,22 +168,12 @@ function load_fan(src, data)
   if (loadpath ~= 0) % then they actually selected a file
     load("-text", [loadpath, loadfile]);
 
+    % Update menu checks and enables
+    update_timeseries_menu();
+
     % (Re-)plot all
     replot_all([1,0,0]); % <-- 1 = rescale x-axis
 
-    % Set menu checkmarks appropriately
-    global m_fft_window_hamming
-    global m_fft_window_hanning
-    global m_fft_zeromean
-    global m_fft_zeropad
-    global m_fft_visible
-    global m_bp_apply
-    set(m_fft_window_hamming, "checked", on_off(apply_hamming));
-    set(m_fft_window_hanning, "checked", on_off(apply_hanning));
-    set(m_fft_zeromean,       "checked", on_off(zeromean));
-    set(m_fft_zeropad,        "checked", on_off(zeropad));
-    set(m_fft_visible,        "checked", on_off(only_visible));
-    set(m_bp_apply,           "checked", on_off(apply_bps));
   end % if
 
 end % function
@@ -395,6 +385,8 @@ function create_figure(src, data, fig_no)
     case 1 % The timeseries figure
       global screensize
       global gapsize
+      global period
+      global nprofile_bins
 
       winsize_x  = screensize(3) - 2*gapsize;
       winsize_y  = floor((screensize(4) - 3*gapsize)/2);
@@ -404,6 +396,18 @@ function create_figure(src, data, fig_no)
       fig_handles(fig_no) = figure("Name", "Timeseries", ...
                                    "Position", [winpos_x, winpos_y, winsize_x, winsize_y], ...
                                    "DeleteFcn", {@destroy_figure, fig_no});
+
+      if (isempty(period))
+        plot_profile_enable_state = "off";
+        plot_waterfall_enable_state = "off";
+      else
+        plot_profile_enable_state = "on";
+        plot_waterfall_enable_state = "on";
+      end % if
+
+      if (isempty(nprofile_bins))
+        plot_profile_enable_state = "off";
+      end % if
 
       %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
       % Set up the menu for the timeseries figure %
@@ -437,6 +441,7 @@ function create_figure(src, data, fig_no)
                                           'callback', @toggle_flatten);
 
       % The Profile menu
+      global m_profile_plot  m_profile_waterfall
       m_profile            = uimenu('label', '&Profile');
       m_profile_setperiod  = uimenu(m_profile, 'label', '&Set period', 'callback', @get_period_from_user);
       m_profile_selperiod  = uimenu(m_profile, 'label', 'Se&lect period from pulsar', 'callback', @select_pulsarperiod);
@@ -444,6 +449,9 @@ function create_figure(src, data, fig_no)
       m_profile_plot       = uimenu(m_profile, 'label', '&Plot profile', 'separator', 'on', ...
                                                'accelerator', 'p', 'callback', @plot_profile);
       m_profile_waterfall  = uimenu(m_profile, 'label', 'Plot &waterfall', 'callback', @plot_waterfall);
+
+      % Set checks and enables correctly
+      update_timeseries_menu();
 
     case 2 % The FFT figure
       global screensize
@@ -1197,16 +1205,73 @@ function calc_profile()
 
 end % function
 
+function set_period(newperiod)
+
+  % Change period
+  global period
+  period = newperiod;
+
+  % Update the menu
+  update_timeseries_menu();
+
+  % Update the plots
+  replot_all();
+
+end % function
+
+function set_nbins(newnbins)
+
+  % Change period
+  global nprofile_bins
+  nprofile_bins = newnbins;
+
+  % Update the menu
+  update_timeseries_menu();
+
+  % Update the plots
+  replot_all();
+
+end % function
+
+function update_timeseries_menu()
+
+  global period
+  global nprofile_bins
+  global zeromean
+  global zeropad
+  global only_visible
+  global apply_hamming
+  global apply_hanning
+  global apply_bps
+
+  global m_fft_window_hamming
+  global m_fft_window_hanning
+  global m_fft_zeromean
+  global m_fft_zeropad
+  global m_fft_visible
+  global m_bp_apply
+  global m_profile_plot
+  global m_profile_waterfall
+
+  set(m_fft_window_hamming, "checked", on_off(apply_hamming));
+  set(m_fft_window_hanning, "checked", on_off(apply_hanning));
+  set(m_fft_zeromean,       "checked", on_off(zeromean));
+  set(m_fft_zeropad,        "checked", on_off(zeropad));
+  set(m_fft_visible,        "checked", on_off(only_visible));
+  set(m_bp_apply,           "checked", on_off(apply_bps));
+  set(m_profile_plot,      "enable", on_off(period && nprofile_bins));
+  set(m_profile_waterfall, "enable", on_off(period));
+
+end % function
+
 function get_period_from_user(src, data)
 
   global period
 
   cstr = inputdlg({"Enter period in seconds:"}, "Period", 1, {num2str(period)});
   if (~isempty(cstr))
-    period = str2num(cstr{1});
+    set_period(str2num(cstr{1}));
   end % if
-
-  replot_all();
 
 end % function
 
@@ -1215,15 +1280,28 @@ function get_nbins_from_user(src, data)
   global nprofile_bins
 
   cstr = inputdlg({"Enter number of bins:"}, "Profile bins", 1, {num2str(nprofile_bins)});
-  if (~isempty(cstr))
-    nprofile_bins = str2num(cstr{1});
-    if (mod(nprofile_bins,1) ~= 0) % If they don't input a whole number
-      nprofile_bins = round(nprofile_bins);
-      errordlg(sprintf('Rounding %s to %d', cstr, nprofile_bins));
-    end % if
+
+  % Check if user clicked cancel
+  if (isempty(cstr))
+    return;
   end % if
 
-  replot_all();
+  % Convert the value to an appropriate number
+  try
+    input = str2num(cstr{1});
+  catch
+    errordlg("Unable to convert input to numeric type");
+    return
+  end % try_catch
+
+  % Check if they put in something other than an integer
+  if (mod(input,1) ~= 0)
+    input = round(input);
+    errordlg(sprintf('Rounding %s to %d', cstr, input));
+  end % if
+
+  % Update the value!
+  set_nbins(input);
 
 end % function
 
@@ -1332,9 +1410,7 @@ function select_pulsarperiod(src, data)
 
   [sel, ok] = listdlg("ListString", names, "SelectionMode", "Single", "Name", "Select pulsar");
   if (ok)
-    period = pulsarperiods{sel,2};
+    set_period(pulsarperiods{sel,2});
   end % if
-
-  replot_all();
 
 end % function
