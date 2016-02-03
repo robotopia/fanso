@@ -172,7 +172,7 @@ function load_fan(src, data)
     update_timeseries_menu();
 
     % (Re-)plot all
-    replot_all([1,0,0]); % <-- 1 = rescale x-axis
+    replot_all();
 
   end % if
 
@@ -234,7 +234,7 @@ function change_dt(src, data)
 
   if (~isempty(cstr))
     dt   = str2num(cstr{1});
-    replot_all([1,0,0,0,0,0,0,0,0,0]);
+    replot_all();
   end % if
 
 end % function
@@ -251,7 +251,7 @@ function toggle_hamming(src, data)
   end % if
 
   % Redraw plots
-  replot_all();
+  replot(2, "none");
 
 end % function
 
@@ -267,7 +267,7 @@ function toggle_hanning(src, data)
   end % if
 
   % Redraw plots
-  replot_all();
+  replot(2, "none");
 
 end % function
 
@@ -283,7 +283,7 @@ function toggle_zeromean(src, data)
   end % if
 
   % Redraw plots
-  replot_all();
+  replot(2, "none");
 
 end % function
 
@@ -309,7 +309,7 @@ function toggle_zeropad(src, data)
   end % if
 
   % Redraw plots
-  replot_all();
+  replot(2); % FFT
 
 end % function
 
@@ -325,7 +325,8 @@ function toggle_visible(src, data)
   end % if
 
   % Redraw plots
-  replot_all();
+  replot(2, "none");
+  replot(4, "none");
 
 end % function
 
@@ -353,7 +354,7 @@ function add_breakpoints(src, data)
           breakpoints = setdiff(breakpoints, breakpoints(nearest_idx));
         end
     end % switch
-    replot_all();
+    replot(1, "none");
   until (button == 115) % 115='s'
   title('');
 
@@ -373,7 +374,7 @@ function toggle_flatten(src, data)
   end % if
 
   % Redraw plots
-  replot_all();
+  replot_all("none");
 
 end % function
 
@@ -633,7 +634,7 @@ function change_dynamic_range(src, data, fig_no, minfactor, maxfactor)
     end % switch
   end % if
 
-  replot_all();
+  replot(fig_no, "none");
 
 end % function
 
@@ -789,11 +790,11 @@ function select_period(src, data)
   cstr = inputdlg({"Harmonic number of selected point:"}, "Harmonic", 1, {"1"});
   if (~isempty(cstr))
     nharm = str2num(cstr{1});
-    period = nharm/x;
-    replot_all();
+    set_period(nharm/x);
   end % if
 
   % Reset title
+  figure(fig_handles(2));
   title("");
 
 end % function
@@ -1215,7 +1216,9 @@ function set_period(newperiod)
   update_timeseries_menu();
 
   % Update the plots
-  replot_all();
+  replot(3);
+  replot(4);
+  replot(5);
 
 end % function
 
@@ -1229,7 +1232,7 @@ function set_nbins(newnbins)
   update_timeseries_menu();
 
   % Update the plots
-  replot_all();
+  replot(3);
 
 end % function
 
@@ -1348,37 +1351,54 @@ function set_fft_plot_type(src, data, newvalue)
   global fft_plot_type
   fft_plot_type = newvalue;
 
-  replot_all();
+  replot(2, "y");
 
 end % function
 
-function replot_all(rescale = [0,0,0,0,0,0,0,0,0,0])
+function replot(fig_no, rescale = "xy")
+% function: replot(fig_no, rescale = "none")
+%
+% rescale can be "none", "x", "y", or "xy"
+%
 
   global fig_handles
   global fig_functions
 
+  % Get the handle for the figure
+  h = fig_handles(fig_no);
+
+  % If the figure already exists and has an associated plot function
+  if ((fig_no <= length(fig_functions)) && (h ~= 0))
+
+    % Save the old axis info
+    ax = axis();
+
+    % Run the plotting function
+    fig_functions{fig_no}();
+
+    % Update the axis
+    figure(h);
+    switch rescale
+      case "none"
+        axis(ax);
+      case "x"
+        ylim([ax(3), ax(4)]);
+      case "y"
+        xlim([ax(1), ax(2)]);
+      % case "xy" happens naturally
+    end % switch
+
+  end % if
+
+end % function
+
+function replot_all(rescale = "xy")
+
+  global fig_handles
+
   % Loop through the figure numbers
   for fig_no = 1:length(fig_handles)
-
-    h = fig_handles(fig_no);
-
-    % If the figure already exists and has an associated plot function
-    if ((fig_no <= length(fig_functions)) && (h ~= 0))
-
-      % If required, get previous view window and reapply to new plot
-      if (~rescale(fig_no))
-        figure(h);
-        ax = axis();
-        fig_functions{fig_no}();
-        figure(h);
-        %xlim([ax(1), ax(2)]);
-        axis(ax);
-      else
-        fig_functions{fig_no}();
-      end % if
-      
-    end % if
-
+    replot(fig_no, rescale);
   end % for
 
 end % function
