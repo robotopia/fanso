@@ -656,13 +656,12 @@ function destroy_figure(src, data, fig_no)
     % ... (yet to implement)
 
     % Close all (open) figures attached to this instance of FANSO
-%    for fig_no = 1:length(fig_handles)
-%      h = fig_handles(fig_no);
-%      if (h)
-%        close h;
-%      end % if
-%    end % for
-    close all
+    for fig_no = 2:length(fig_handles)
+      h = fig_handles(fig_no);
+      if (h)
+        close(h);
+      end % if
+    end % for
   else
     fig_handles(fig_no) = 0;
   end % if
