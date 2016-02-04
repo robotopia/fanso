@@ -8,40 +8,15 @@ function fanso()
 
   clear -global
 
-  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-  % Global variables that need initialising upon program startup %
-  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-  global dt;                  % the time between samples in the timeseries (in seconds)
-  global timeseries;          % the original timeseries
-  global flattened;           % timeseries flattened by linear detrending between breakpoints
-  global timeseries_grid;     % timeseries recase into a grid (one pulse per row)
-  global breakpoint_mask;     % 0 = do not use this value in calculating linear trends; 1 = use this value
-  global profile_mask;        % A pair of phases that define a region of phases to be ignored in the breakpoint linear fits
-  global fft_plot_type;       % 0 = amplitudes;  1 = power
-  global waterfall_plot_type; % 0 = 2D color;  1 = 3D heights
-
-  % Variables for the size and position of the figure windows
-  global screensize;
-  global gapsize;
-  global fig_handles;
-  global fig_functions;
-
-  % Variables for the plot settings
-  global zeromean;      % 0 = Do nothing;               1 = Zero mean before applying FFT
-  global zeropad;       % 0 = Do nothing;               1 = Zero-pad to a nearly-whole number of periods
-  global only_visible;  % 0 = FFT of entire timeseries; 1 = FFT of only visible timeseries
-  global apply_hamming; % 0 = Do nothing;               1 = Apply Hamming window
-  global apply_hanning; % 0 = Do nothing;               1 = Apply Hanning window
-  global apply_bps;     % 0 = Do nothing;               1 = Apply breakpoints (i.e. "flatten" timeseries)
-
-  % A global variable for the breakpoints
-  global breakpoints;
+  % Initialise global variables relating to plots
+  init_plot_variables();
 
   % Load known pulsar periods
-  loadperiods();
+  load_periods();
 
-  % Set initial values
+  % Setup figure handling system
+  global fig_handles;
+  global fig_functions;
   fig_handles = zeros(10,1); % 10 is arbitrary. Should be more than enough. Increase if needed.
                              % (1) = timeseries plot
                              % (2) = FFT plot
@@ -50,27 +25,7 @@ function fanso()
                              % (5) = waterfall plot of timeseries modulo period
   fig_functions = {@plot_timeseries, @plot_fft, @plot_profile, @plot_hrfs, @plot_waterfall, @plot_tdfs};
 
-  timeseries          = zeros(100,1);
-  dt                  = 1;
-  flattened           = timeseries;
-  breakpoint_mask     = ones(size(timeseries));
-  profile_mask        = [0,0];
-  fft_plot_type       = 0;
-  waterfall_plot_type = 0;
-
-  screensize = get(0, 'screensize');
-  gapsize    = 100;
-
-  zeromean      = 0;
-  zeropad       = 0;
-  only_visible  = 0;
-  apply_hamming = 0;
-  apply_hanning = 0;
-  apply_bps     = 0;
-
-  breakpoints = [];
-
-  % Require that we are using the correct graphics toolkit
+  % Require that we are using the correct graphics toolkit (FLTK)
   gtk = 'fltk';
   if (~any(strcmp(available_graphics_toolkits(), gtk)))
     disp(['This function requires ',gtk,' to be installed.'])
@@ -84,7 +39,67 @@ function fanso()
 
 end % function
 
-function save_fan(src, data)
+function init_plot_variables()
+% Initialise global variables that need resetting upon program startup
+% and whenever a new time series is imported.
+
+  % The "main" global variables relating to the data themselves
+  global dt                  % the time between samples in the timeseries (in seconds)
+  global timeseries          % the original timeseries
+  global flattened           % timeseries flattened by linear detrending between breakpoints
+  global timeseries_grid     % timeseries recase into a grid (one pulse per row)
+  global breakpoint_mask     % 0 = do not use this value in calculating linear trends; 1 = use this value
+  global profile_mask        % A pair of phases that define a region of phases to be ignored in the breakpoint linear fits
+  global fft_plot_type       % 0 = amplitudes;  1 = power
+  global waterfall_plot_type % 0 = 2D color;  1 = 3D heights
+  global period              % The folding period (P1)
+  global nprofile_bins       % The number of bins to be used for folding output
+
+  % Variables for the size and position of the figure windows
+  global screensize
+  global gapsize
+
+  % Variables for the plot settings
+  global zeromean       % 0 = Do nothing;               1 = Zero mean before applying FFT
+  global zeropad        % 0 = Do nothing;               1 = Zero-pad to a nearly-whole number of periods
+  global only_visible   % 0 = FFT of entire timeseries; 1 = FFT of only visible timeseries
+  global apply_hamming  % 0 = Do nothing;               1 = Apply Hamming window
+  global apply_hanning  % 0 = Do nothing;               1 = Apply Hanning window
+  global apply_bps      % 0 = Do nothing;               1 = Apply breakpoints (i.e. "flatten" timeseries)
+
+  % A global variable for the breakpoints
+  global breakpoints;
+
+  % A global variable for keeping track of the name of the loaded file
+  global filename
+
+  timeseries          = zeros(100,1);
+  dt                  = 1;
+  flattened           = zeros(size(timeseries));
+  breakpoint_mask     = ones(size(timeseries));
+  profile_mask        = [0,0];
+  fft_plot_type       = 0;
+  waterfall_plot_type = 0;
+  clear period
+  clear nprofile_bins
+
+  screensize = get(0, 'screensize');
+  gapsize    = 100;
+
+  zeromean      = 0;
+  zeropad       = 0;
+  only_visible  = 0;
+  apply_hamming = 0;
+  apply_hanning = 0;
+  apply_bps     = 0;
+
+  breakpoints = [];
+
+  filename = [];
+
+end % function
+
+function save_data(filepathname)
 
   % Get all relevant global variables in this scope
   global dt
@@ -108,32 +123,53 @@ function save_fan(src, data)
   global tdfs_cmin
   global tdfs_cmax
 
-  % Open up a Save File dialog box
-  [savefile, savepath, fltidx] = uiputfile({"*.fan", "FANSO file"});
+  % Save all the info!
+  save(filepathname, ...
+        "dt", ...
+        "timeseries", ...
+        "flattened", ...
+        "breakpoint_mask", ...
+        "profile_mask", ...
+        "zeromean", ...
+        "zeropad", ...
+        "only_visible", ...
+        "apply_hamming", ...
+        "apply_hanning", ...
+        "apply_bps", ...
+        "breakpoints", ...
+        "nprofile_bins", ...
+        "period", ...
+        "hrfs_cmin", ...
+        "hrfs_cmax", ...
+        "waterfall_cmin", ...
+        "waterfall_cmax", ...
+        "tdfs_cmin", ...
+        "tdfs_cmax");
 
-  if (savepath ~= 0) % then they actually selected a file
-    % Save all the info!
-    save([savepath, savefile], ...
-          "dt", ...
-          "timeseries", ...
-          "flattened", ...
-          "breakpoint_mask", ...
-          "profile_mask", ...
-          "zeromean", ...
-          "zeropad", ...
-          "only_visible", ...
-          "apply_hamming", ...
-          "apply_hanning", ...
-          "apply_bps", ...
-          "breakpoints", ...
-          "nprofile_bins", ...
-          "period", ...
-          "hrfs_cmin", ...
-          "hrfs_cmax", ...
-          "waterfall_cmin", ...
-          "waterfall_cmax", ...
-          "tdfs_cmin", ...
-          "tdfs_cmax");
+end % function
+
+function save_fan(src, data)
+
+  global filepath
+  global filename
+
+  % Assumption: This function is only able to be called
+  %             if filepath and filename have proper values.
+
+  save_data([filepath, filename]);
+
+end % function
+
+function saveas_fan(src, data)
+
+  global filepath
+  global filename
+
+  % Open up a Save File dialog box
+  [savefile, savepath] = uiputfile([filepath, filename]);
+
+  if (~strcmp(savepath, "0")) % then they actually selected a file
+    save_data([savepath, savefile]);
   end % if
 
 end % function
@@ -162,17 +198,29 @@ function load_fan(src, data)
   global tdfs_cmin
   global tdfs_cmax
 
+  global filename
+  global filepath
+
   % Open up an Open File dialog box
-  [loadfile, loadpath, fltidx] = uigetfile({"*.fan", "FANSO file"});
+  [loadfile, loadpath] = uigetfile({"*.fan", "FANSO file"});
 
-  if (loadpath ~= 0) % then they actually selected a file
-    load("-text", [loadpath, loadfile]);
+  if (~strcmp(loadpath, "0")) % then they actually selected a file
+    try
+      % Load file contents
+      load("-text", [loadpath, loadfile]);
 
-    % Update menu checks and enables
-    update_timeseries_menu();
+      % Store file name + path in global variables
+      filename = loadfile;
+      filepath = loadpath;
 
-    % (Re-)plot all
-    replot_all();
+      % Update menu checks and enables
+      update_timeseries_menu();
+
+      % (Re-)plot all
+      replot_all();
+    catch
+      errordlg(["Unable to load file \"", loadfile, "\""]);
+    end % try_catch
 
   end % if
 
@@ -181,41 +229,31 @@ end % function
 function import_timeseries(src, data)
 
   global timeseries
-  global flattened
-  global breakpoint_mask
-  global profile_mask
-  global zeromean
-  global zeropad
-  global only_visible
-  global apply_hamming
-  global apply_hanning
-  global apply_bps
 
   % Get file from Open File dialog box
-  [loadfile, loadpath, fltidx] = uigetfile();
+  [loadfile, loadpath] = uigetfile();
 
   if (loadfile ~= 0) % The user has actually chosen a file
     try
+      % Load the contents of the selected file into a matrix
       mat = load("-ascii", [loadpath, loadfile]);
 
+      % Reset all the variables
+      init_plot_variables();
+
+      % Warn the user if file contains more than one column of numbers
       if (~isvector(mat))
         warndlg("Input file contains multiple columns.\nReading only the first column as timeseries.", ...
                 "Multiple columns detected");
       end % if
 
+      % Set the timeseries to the (first) column of values
       timeseries = mat(:,1);
+
+      % Mandate that they supply the sampling rate
       change_dt();
 
-      flattened  = timeseries;
-      breakpoint_mask   = ones(size(timeseries));
-      profile_mask      = [0,0];
-
-      zeromean      = 0;
-      zeropad       = 0;
-      only_visible  = 0;
-      apply_hamming = 0;
-      apply_hanning = 0;
-      apply_bps     = 0;
+      replot_all();
 
     catch
       errordlg("This file is in an unreadable format.\nSee the '-ascii' option in Octave's load() function for details", ...
@@ -415,9 +453,11 @@ function create_figure(src, data, fig_no)
       %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
       % The Data menu
+      global m_data_save
       m_data               = uimenu('label', '&Data');
       m_data_open          = uimenu(m_data, 'label', '&Open', 'callback', @load_fan);
       m_data_save          = uimenu(m_data, 'label', '&Save', 'callback', @save_fan);
+      m_data_saveas        = uimenu(m_data, 'label', 'Save &As', 'callback', @saveas_fan);
       m_data_import_ts     = uimenu(m_data, 'label', '&Import timeseries', 'separator', 'on', 'callback', @import_timeseries);
       m_data_change_dt     = uimenu(m_data, 'label', '&Change dt', 'callback', @change_dt);
 
@@ -672,6 +712,8 @@ function plot_timeseries(src, data)
 
   global fig_handles
 
+  global filename
+
   global timeseries
   global flattened
   global dt
@@ -687,7 +729,14 @@ function plot_timeseries(src, data)
     create_figure(0,0,fig_no);
   end % if
 
-  figure(fig_handles(fig_no));
+  % Create figure window title
+  if (isempty(filename))
+    figure_name = "Timeseries";
+  else
+    figure_name = ["Timeseries: ", filename];
+  end % if
+
+  figure(fig_handles(fig_no), "Name", figure_name);
 
   % Calculate the values for the timeseries abscissa
   N = length(timeseries);
@@ -702,8 +751,6 @@ function plot_timeseries(src, data)
     if(~isempty(breakpoints))
       global ms
       global cs
-
-      flatten();
 
       % Prepare vertical lines for breakpoint plotting
       bp_xs = [1;1] * breakpoints;
@@ -727,7 +774,7 @@ function plot_timeseries(src, data)
       plot(t, timeseries, 'b');
     end % if
   end % if
-  figure(fig_handles(fig_no)); % <-- Possibly redundant, remains to be checked
+  %figure(fig_handles(fig_no)); % <-- Possibly redundant, remains to be checked
   xlabel('Time (s)');
   ylabel('Timeseries values');
 
@@ -1245,6 +1292,8 @@ function update_timeseries_menu()
   global apply_hamming
   global apply_hanning
   global apply_bps
+  global filename
+  global filepath
 
   global m_fft_window_hamming
   global m_fft_window_hanning
@@ -1254,6 +1303,7 @@ function update_timeseries_menu()
   global m_bp_apply
   global m_profile_plot
   global m_profile_waterfall
+  global m_data_save
 
   set(m_fft_window_hamming, "checked", on_off(apply_hamming));
   set(m_fft_window_hanning, "checked", on_off(apply_hanning));
@@ -1261,8 +1311,9 @@ function update_timeseries_menu()
   set(m_fft_zeropad,        "checked", on_off(zeropad));
   set(m_fft_visible,        "checked", on_off(only_visible));
   set(m_bp_apply,           "checked", on_off(apply_bps));
-  set(m_profile_plot,      "enable", on_off(period && nprofile_bins));
-  set(m_profile_waterfall, "enable", on_off(period));
+  set(m_profile_plot,       "enable",  on_off(period && nprofile_bins));
+  set(m_profile_waterfall,  "enable",  on_off(period));
+  set(m_data_save,          "enable",  on_off(filename && filepath));
 
 end % function
 
@@ -1402,7 +1453,7 @@ function replot_all(rescale = "xy")
 
 end % function
 
-function loadperiods()
+function load_periods()
 
   global pulsarperiods
 
