@@ -73,6 +73,19 @@ function init_plot_variables()
   % A global variable for keeping track of the name of the loaded file
   global filename
 
+  % Plot viewing parameters
+  global fig_functions
+  global plot_params
+  plot_params = nan(length(fig_functions), 12);
+    % 12 plot parameters to be stored here are:
+    %    xmin, xmax, ymin, ymax, zmin, zmax, cmin, cmax,  % <-- real numbers
+    %    xlog, ylog, zlog,                                % <-- bools
+    %    cmap                                             % <-- integers
+  % Set log params to 0
+  plot_params(:, 9:11) = 0;
+  % Set cmap to grayscale
+  plot_params(:, 12) = 8;
+
   timeseries          = zeros(100,1);
   dt                  = 1;
   flattened           = zeros(size(timeseries));
@@ -145,12 +158,7 @@ function save_data(filepathname)
   global breakpoints
   global nprofile_bins
   global period
-  global hrfs_cmin
-  global hrfs_cmax
-  global waterfall_cmin
-  global waterfall_cmax
-  global tdfs_cmin
-  global tdfs_cmax
+  global plot_params
 
   % Save all the info!
   save(filepathname, ...
@@ -168,12 +176,7 @@ function save_data(filepathname)
         "breakpoints", ...
         "nprofile_bins", ...
         "period", ...
-        "hrfs_cmin", ...
-        "hrfs_cmax", ...
-        "waterfall_cmin", ...
-        "waterfall_cmax", ...
-        "tdfs_cmin", ...
-        "tdfs_cmax");
+        "plot_params");
 
   set_unsaved_changes(false);
 
@@ -216,7 +219,7 @@ function cont = offer_to_save()
 % or user chooses either Yes or No from the
 % dialog box. Returns false if they choose Cancel.
 
-  cont = 1;
+  cont = true;
 
   global unsaved_changes
   global filename
@@ -233,7 +236,7 @@ function cont = offer_to_save()
           saveas_fan();
         end
       case "Cancel"
-        cont = 0;
+        cont = false;
     end % switch
   end % if
 
@@ -256,12 +259,7 @@ function load_fan(src, data)
   global breakpoints
   global nprofile_bins
   global period
-  global hrfs_cmin
-  global hrfs_cmax
-  global waterfall_cmin
-  global waterfall_cmax
-  global tdfs_cmin
-  global tdfs_cmax
+  global plot_params
 
   global filename
   global filepath
@@ -642,17 +640,7 @@ function create_figure(src, data, fig_no)
       % Set up menu for HRFS figure %
       %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-      m_hrfs_dynamicrange          = uimenu('label', '&Dynamic range');
-      m_hrfs_dynamicrange_change   = uimenu(m_hrfs_dynamicrange, 'label', 'Set dynamic range limits', ...
-                                                                 'callback', {@change_dynamic_range, fig_no, 0, 0});
-      m_hrfs_dynamicrange_incmax   = uimenu(m_hrfs_dynamicrange, 'label', 'Increase Max by 10% of range', 'accelerator', '+', ...
-                                              'separator', 'on', 'callback', {@change_dynamic_range, fig_no, 0,  0.1});
-      m_hrfs_dynamicrange_decmax   = uimenu(m_hrfs_dynamicrange, 'label', 'Decrease Max by 10% of range', 'accelerator', '_', ...
-                                                                 'callback', {@change_dynamic_range, fig_no, 0, -0.1});
-      m_hrfs_dynamicrange_incmin   = uimenu(m_hrfs_dynamicrange, 'label', 'Increase Min by 10% of range', 'accelerator', '=', ...
-                                                                 'callback', {@change_dynamic_range, fig_no,  0.1, 0});
-      m_hrfs_dynamicrange_decmin   = uimenu(m_hrfs_dynamicrange, 'label', 'Decrease Min by 10% of range', 'accelerator', '-', ...
-                                                                 'callback', {@change_dynamic_range, fig_no, -0.1, 0});
+      create_dynamicrange_menu(fig_no);
 
     case 5 % The waterfall plot of the timeseries
       fig_handles(fig_no) = figure("Name", "Waterfall plot", ...
@@ -667,53 +655,36 @@ function create_figure(src, data, fig_no)
                                                   'callback', {@set_waterfall_plot_type, 0});
       m_waterfall_3D        = uimenu(m_waterfall, 'label', '3D', 'accelerator', '3', ...
                                                   'callback', {@set_waterfall_plot_type, 1});
-      m_waterfall_dynamicrange        = uimenu('label', '&Dynamic range');
-      m_waterfall_dynamicrange_change = uimenu(m_waterfall_dynamicrange, ...
-                                               'label', 'Set dynamic range limits', ...
-                                               'callback', {@change_dynamic_range, fig_no, 0, 0});
-      m_waterfall_dynamicrange_incmax = uimenu(m_waterfall_dynamicrange, ...
-                                               'label', 'Increase Max by 10% of range', ...
-                                               'accelerator', '+', 'separator', 'on', ...
-                                               'callback', {@change_dynamic_range, fig_no, 0,  0.1});
-      m_waterfall_dynamicrange_decmax = uimenu(m_waterfall_dynamicrange, ...
-                                               'label', 'Decrease Max by 10% of range', ...
-                                               'accelerator', '_', ...
-                                               'callback', {@change_dynamic_range, fig_no, 0, -0.1});
-      m_waterfall_dynamicrange_incmin = uimenu(m_waterfall_dynamicrange,
-                                               'label', 'Increase Min by 10% of range', ...
-                                               'accelerator', '=', ...
-                                               'callback', {@change_dynamic_range, fig_no,  0.1, 0});
-      m_waterfall_dynamicrange_decmin = uimenu(m_waterfall_dynamicrange, ...
-                                               'label', 'Decrease Min by 10% of range', ...
-                                               'accelerator', '-', ...
-                                               'callback', {@change_dynamic_range, fig_no, -0.1, 0});
+      create_dynamicrange_menu(fig_no);
 
     case 6 % The 2DFS plot
       fig_handles(fig_no) = figure("Name", "2D Fluctuation Spectrum", ...
                                    "CloseRequestFcn", {@close_figure, fig_no});
-
-      m_tdfs_dynamicrange        = uimenu('label', '&Dynamic range');
-      m_tdfs_dynamicrange_change = uimenu(m_tdfs_dynamicrange, ...
-                                          'label', 'Set dynamic range limits', ...
-                                          'callback', {@change_dynamic_range, fig_no, 0, 0});
-      m_tdfs_dynamicrange_incmax = uimenu(m_tdfs_dynamicrange, ...
-                                          'label', 'Increase Max by 10% of range', ...
-                                          'accelerator', '+', 'separator', 'on', ...
-                                          'callback', {@change_dynamic_range, fig_no, 0,  0.1});
-      m_tdfs_dynamicrange_decmax = uimenu(m_tdfs_dynamicrange, ...
-                                          'label', 'Decrease Max by 10% of range', ...
-                                          'accelerator', '_', ...
-                                          'callback', {@change_dynamic_range, fig_no, 0, -0.1});
-      m_tdfs_dynamicrange_incmin = uimenu(m_tdfs_dynamicrange,
-                                          'label', 'Increase Min by 10% of range', ...
-                                          'accelerator', '=', ...
-                                          'callback', {@change_dynamic_range, fig_no,  0.1, 0});
-      m_tdfs_dynamicrange_decmin = uimenu(m_tdfs_dynamicrange, ...
-                                          'label', 'Decrease Min by 10% of range', ...
-                                          'accelerator', '-', ...
-                                          'callback', {@change_dynamic_range, fig_no, -0.1, 0});
+      create_dynamicrange_menu(fig_no);
 
   end % switch
+
+end % function
+
+function create_dynamicrange_menu(fig_no)
+
+  global fig_handles
+  figure(fig_handles(fig_no));
+
+  % Parent menu
+  m_dynamicrange = uimenu('label', '&Dynamic range');
+
+  % Children menu items
+  uimenu(m_dynamicrange, 'label', 'Set dynamic range limits', ...
+                         'callback', {@scale_caxis, fig_no, 0, 0});
+  uimenu(m_dynamicrange, 'label', 'Increase Max by 10% of range', 'accelerator', '+', ...
+                         'separator', 'on', 'callback', {@scale_caxis, fig_no, 0,  0.1});
+  uimenu(m_dynamicrange, 'label', 'Decrease Max by 10% of range', 'accelerator', '_', ...
+                         'callback', {@scale_caxis, fig_no, 0, -0.1});
+  uimenu(m_dynamicrange, 'label', 'Increase Min by 10% of range', 'accelerator', '=', ...
+                         'callback', {@scale_caxis, fig_no,  0.1, 0});
+  uimenu(m_dynamicrange, 'label', 'Decrease Min by 10% of range', 'accelerator', '-', ...
+                         'callback', {@scale_caxis, fig_no, -0.1, 0});
 
 end % function
 
@@ -730,61 +701,104 @@ function set_waterfall_plot_type(src, data, newvalue)
 
 end % function
 
-function change_dynamic_range(src, data, fig_no, minfactor, maxfactor)
+function set_axis(fig_no, axis_char, newmin = NaN, newmax = NaN)
 
-  global hrfs_cmin
-  global hrfs_cmax
+  global plot_params
 
-  global waterfall_cmin
-  global waterfall_cmax
+  try
+    colmax = 2*find(axis_char == "xyzc");
+    colmin = colmax - 1;
+  catch
+    errordlg({["Unfamiliar axis code (\"", axis_char, "\":"], lasterr()});
+    return
+  end % try_catch
 
-  global tdfs_cmin
-  global tdfs_cmax
+  % Get current values
+  curr_min = plot_params(fig_no, colmin);
+  curr_max = plot_params(fig_no, colmax);
 
-  if (all(~[minfactor, maxfactor])) % Putting in zeros for these parameters brings up a dialog box
-    switch fig_no
-      case 4 % HRFS
-        cstrs = inputdlg({"Min:", "Max:"}, "Enter new dynamic range limits", ...
-                         1, {num2str(hrfs_cmin), num2str(hrfs_cmax)});
-        if (~isempty(cstrs))
-          hrfs_cmin = str2num(cstrs{1});
-          hrfs_cmax = str2num(cstrs{2});
-        end % if
-      case 5 % Waterfall plot
-        cstrs = inputdlg({"Min:", "Max:"}, "Enter new dynamic range limits", ...
-                         1, {num2str(waterfall_cmin), num2str(waterfall_cmax)});
-        if (~isempty(cstrs))
-          waterfall_cmin = str2num(cstrs{1});
-          waterfall_cmax = str2num(cstrs{2});
-        end % if
-      case 6 % 2DFS
-        cstrs = inputdlg({"Min:", "Max:"}, "Enter new dynamic range limits", ...
-                         1, {num2str(tdfs_cmin), num2str(tdfs_cmax)});
-        if (~isempty(cstrs))
-          tdfs_cmin = str2num(cstrs{1});
-          tdfs_cmax = str2num(cstrs{2});
-        end % if
-    end % switch
-  else
-    switch fig_no
-      case 4 % HRFS
-        crange = hrfs_cmax - hrfs_cmin;
-        hrfs_cmin = hrfs_cmin + crange*minfactor;
-        hrfs_cmax = hrfs_cmax + crange*maxfactor;
-      case 5 % Waterfall plot
-        crange = waterfall_cmax - waterfall_cmin;
-        waterfall_cmin = waterfall_cmin + crange*minfactor;
-        waterfall_cmax = waterfall_cmax + crange*maxfactor;
-      case 6 % 2DFS
-        crange = tdfs_cmax - tdfs_cmin;
-        tdfs_cmin = tdfs_cmin + crange*minfactor;
-        tdfs_cmax = tdfs_cmax + crange*maxfactor;
-    end % switch
+  % If new values are NaNs, then ask for values via a dialog box
+  switch isnan([newmin, newmax])
+
+    case [true, true]
+
+      % Ask for new values via a dialog box
+      cstrs = inputdlg({"Min:", "Max:"}, ["Enter new ", axis_char, "-axis limits"], ...
+                       1, {num2str(curr_min), num2str(curr_max)});
+
+      if (isempty(cstrs)) % They pushed cancel
+        return
+      end % if
+
+      newmin = str2num(cstrs{1});
+      newmax = str2num(cstrs{2});
+
+    case [true, false]
+
+      % Ask for one new value
+      cstr = inputdlg({"Min:"}, ["Enter new ", axis_char, "-axis minimum"], ...
+                      1, {num2str(curr_min)});
+
+      if (isempty(cstr)) % They pushed cancel
+        return
+      end % if
+
+      newmin = str2num(cstr{1});
+
+    case [false, true]
+
+      % Ask for one new value
+      cstr = inputdlg({"Max:"}, ["Enter new ", axis_char, "-axis maximum"], ...
+                      1, {num2str(curr_max)});
+
+      if (isempty(cstr)) % They pushed cancel
+        return
+      end % if
+
+      newmax = str2num(cstr{1});
+
+  end % switch
+
+  % Check if new values are different from old
+  if ((newmin ~= curr_min) || (newmax ~= curr_max))
+    set_unsaved_changes(true);
   end % if
 
-  set_unsaved_changes(true);
+  % Actually make the changes
+  try
+    plot_params(fig_no, colmin) = newmin;
+    plot_params(fig_no, colmax) = newmax;
+  catch
+    errordlg({"Only numeric values allowed:", lasterr()});
+    return
+  end % try_catch
 
   replot(fig_no, "none");
+
+end % function
+
+function scale_caxis(src, data, fig_no, minfactor, maxfactor)
+
+  if (all(~[minfactor, maxfactor])) % Putting in zeros for these parameters brings up a dialog box
+
+    set_axis(fig_no, 'c');
+
+  else
+
+    % Set new values as scaled version of the old ones
+    global plot_params
+
+    curr_cmin = plot_params(fig_no, 7);
+    curr_cmax = plot_params(fig_no, 8);
+
+    crange = curr_cmax - curr_cmin;
+
+    newmin = curr_cmin + crange*minfactor;
+    newmax = curr_cmax + crange*maxfactor;
+
+    set_axis(fig_no, 'c', newmin, newmax);
+
+  end % if
 
 end % function
 
@@ -1023,8 +1037,7 @@ function plot_hrfs(src, data)
   global spectrum_freqs
   global spectrum_vals
 
-  global hrfs_cmin
-  global hrfs_cmax
+  global plot_params
 
   % Switch to/Create HRFS figure and keep track of the view window
   fig_no = 4;
@@ -1064,8 +1077,15 @@ function plot_hrfs(src, data)
   axis("xy");
   colormap("gray");
   colorbar('ylabel', 'Amplitude');
-  if (~isempty(hrfs_cmin) && ~isempty(hrfs_cmax))
-    caxis([hrfs_cmin, hrfs_cmax]);
+  cmin = plot_params(fig_no, 7);
+  cmax = plot_params(fig_no, 8);
+  if (~isnan(cmin) && ~isnan(cmax))
+    caxis([cmin, cmax]);
+  else
+    cax = caxis();
+    plot_params(fig_no, 7) = cax(1);
+    plot_params(fig_no, 8) = cax(2);
+    set_unsaved_changes(true);
   end % if
 
 end % function
@@ -1078,8 +1098,7 @@ function plot_waterfall(src, data)
   global timeseries_grid
 
   global waterfall_plot_type
-  global waterfall_cmin
-  global waterfall_cmax
+  global plot_params
 
   % Make sure the period has been set
   if (isempty(period))
@@ -1112,8 +1131,15 @@ function plot_waterfall(src, data)
       colormap("gray");
       axis("xy");
       colorbar();
-      if (~isempty(waterfall_cmin) && ~isempty(waterfall_cmax))
-        caxis([waterfall_cmin, waterfall_cmax]);
+      cmin = plot_params(fig_no, 7);
+      cmax = plot_params(fig_no, 8);
+      if (~isnan(cmin) && ~isnan(cmax))
+        caxis([cmin, cmax]);
+      else
+        cax = caxis();
+        plot_params(fig_no, 7) = cax(1);
+        plot_params(fig_no, 8) = cax(2);
+        set_unsaved_changes(true);
       end % if
     case 1 % 3D
       [Xs, Ys] = meshgrid(xs, ys);
@@ -1135,8 +1161,7 @@ function plot_tdfs(src, data)
   global timeseries_grid
   global period
 
-  global tdfs_cmin
-  global tdfs_cmax
+  global plot_params
 
   % Switch to/Create HRFS figure and keep track of the view window
   fig_no = 6;
@@ -1168,8 +1193,15 @@ function plot_tdfs(src, data)
   colormap("gray");
   axis("xy");
   colorbar();
-  if (~isempty(tdfs_cmin) && ~isempty(tdfs_cmax))
-    caxis([tdfs_cmin, tdfs_cmax]);
+  cmin = plot_params(fig_no, 7);
+  cmax = plot_params(fig_no, 8);
+  if (~isnan(cmin) && ~isnan(cmax))
+    caxis([cmin, cmax]);
+  else
+    cax = caxis();
+    plot_params(fig_no, 7) = cax(1);
+    plot_params(fig_no, 8) = cax(2);
+    set_unsaved_changes(true);
   end % if
 
   xlabel("2π ν_l P_1");
@@ -1542,6 +1574,7 @@ function replot(fig_no, rescale = "xy")
   if ((fig_no <= length(fig_functions)) && (h ~= 0))
 
     % Save the old axis info
+    figure(h);
     ax = axis();
 
     % Run the plotting function
@@ -1605,3 +1638,4 @@ function select_pulsarperiod(src, data)
   end % if
 
 end % function
+
