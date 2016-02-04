@@ -170,6 +170,8 @@ function saveas_fan(src, data)
 
   if (~strcmp(savepath, "0")) % then they actually selected a file
     save_data([savepath, savefile]);
+    filepath = savepath;
+    filename = savename;
   end % if
 
 end % function
