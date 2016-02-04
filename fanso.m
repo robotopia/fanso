@@ -8,11 +8,14 @@ function fanso()
 
   clear -global
 
-  % Initialise global variables relating to plots
-  init_plot_variables();
-
-  % Load known pulsar periods
-  load_periods();
+  % Require that we are using the correct graphics toolkit (FLTK)
+  gtk = 'fltk';
+  if (~any(strcmp(available_graphics_toolkits(), gtk)))
+    disp(['This function requires ',gtk,' to be installed.'])
+    return;
+  else
+    graphics_toolkit(gtk);
+  end % if
 
   % Setup figure handling system
   global fig_handles;
@@ -25,14 +28,11 @@ function fanso()
                              % (5) = waterfall plot of timeseries modulo period
   fig_functions = {@plot_timeseries, @plot_fft, @plot_profile, @plot_hrfs, @plot_waterfall, @plot_tdfs};
 
-  % Require that we are using the correct graphics toolkit (FLTK)
-  gtk = 'fltk';
-  if (~any(strcmp(available_graphics_toolkits(), gtk)))
-    disp(['This function requires ',gtk,' to be installed.'])
-    return;
-  else
-    graphics_toolkit(gtk);
-  end % if
+  % Initialise global variables relating to plots
+  init_plot_variables();
+
+  % Load known pulsar periods
+  load_periods();
 
   % Draw the (empty) plot for the first time
   plot_timeseries();
@@ -68,7 +68,7 @@ function init_plot_variables()
   global apply_bps      % 0 = Do nothing;               1 = Apply breakpoints (i.e. "flatten" timeseries)
 
   % A global variable for the breakpoints
-  global breakpoints;
+  global breakpoints
 
   % A global variable for keeping track of the name of the loaded file
   global filename
@@ -96,6 +96,35 @@ function init_plot_variables()
   breakpoints = [];
 
   filename = [];
+
+  set_unsaved_changes(false);
+
+end % function
+
+function set_unsaved_changes(newval)
+
+  global unsaved_changes
+  global fig_handles
+  global filename
+
+  unsaved_changes = newval;
+
+  h = fig_handles(1);
+  if (h) % If main timeseries window exists and is open
+
+    fig_name = ["Timeseries"];
+
+    if (filename)
+      fig_name = [fig_name, ": ", filename];
+    end % if
+
+    if (unsaved_changes)
+      % Add a "*" if there are unsaved changes
+      fig_name = [fig_name, "*"];
+    end
+
+    figure(h, "name", fig_name);
+  end
 
 end % function
 
@@ -146,6 +175,8 @@ function save_data(filepathname)
         "tdfs_cmin", ...
         "tdfs_cmax");
 
+  set_unsaved_changes(false);
+
 end % function
 
 function save_fan(src, data)
@@ -166,12 +197,44 @@ function saveas_fan(src, data)
   global filename
 
   % Open up a Save File dialog box
-  [savefile, savepath] = uiputfile([filepath, filename]);
+  if (filepath && filename)
+    [savefile, savepath] = uiputfile([filepath, filename]);
+  else
+    [savefile, savepath] = uiputfile({"*.fan", "FANSO file"});
+  end % if
 
   if (~strcmp(savepath, "0")) % then they actually selected a file
     save_data([savepath, savefile]);
     filepath = savepath;
-    filename = savename;
+    filename = savefile;
+  end % if
+
+end % function
+
+function cont = offer_to_save()
+% Returns true if either nothing needs saving
+% or user chooses either Yes or No from the
+% dialog box. Returns false if they choose Cancel.
+
+  cont = 1;
+
+  global unsaved_changes
+  global filename
+  global filepath
+
+  if (unsaved_changes)
+    dlg_answer = questdlg("Would you like to save your changes?", "Save changes?");
+
+    switch dlg_answer
+      case "Yes"
+        if (filename && filepath)
+          save_fan();
+        else
+          saveas_fan();
+        end
+      case "Cancel"
+        cont = 0;
+    end % switch
   end % if
 
 end % function
@@ -203,6 +266,11 @@ function load_fan(src, data)
   global filename
   global filepath
 
+  % Ask about unsaved changes
+  if (~offer_to_save())
+    return
+  end % if
+
   % Open up an Open File dialog box
   [loadfile, loadpath] = uigetfile({"*.fan", "FANSO file"});
 
@@ -215,13 +283,16 @@ function load_fan(src, data)
       filename = loadfile;
       filepath = loadpath;
 
+      % Reset unsaved changes flag
+      set_unsaved_changes(false);
+
       % Update menu checks and enables
       update_timeseries_menu();
 
       % (Re-)plot all
       replot_all();
     catch
-      errordlg(["Unable to load file \"", loadfile, "\""]);
+      errordlg({["Unable to load file \"", loadfile, "\""], lasterr()});
     end % try_catch
 
   end % if
@@ -231,6 +302,11 @@ end % function
 function import_timeseries(src, data)
 
   global timeseries
+
+  % Ask about unsaved changes
+  if (~offer_to_save())
+    return
+  end % if
 
   % Get file from Open File dialog box
   [loadfile, loadpath] = uigetfile();
@@ -255,8 +331,10 @@ function import_timeseries(src, data)
       % Mandate that they supply the sampling rate
       change_dt();
 
-      replot_all();
+      % Update menu checks and enables
+      update_timeseries_menu();
 
+      replot_all();
     catch
       errordlg("This file is in an unreadable format.\nSee the '-ascii' option in Octave's load() function for details", ...
                "Open file error");
@@ -270,10 +348,20 @@ function change_dt(src, data)
   global dt;
 
   % Read in the new value via a dialog box
-  cstr = inputdlg("Please enter the timestep in seconds:", "Set timestep");
+  cstr = inputdlg({"Please enter the timestep in seconds:"}, "Set timestep", 1, {num2str(dt,15)});
 
   if (~isempty(cstr))
-    dt   = str2num(cstr{1});
+    newdt = str2num(cstr{1});
+
+    % Set unsaved changes flag
+    if (dt ~= newdt)
+      set_unsaved_changes(true);
+    end % if
+
+    % Update value
+    dt = newdt;
+
+    % Update all figures (they will all be affected)
     replot_all();
   end % if
 
@@ -283,6 +371,8 @@ function toggle_hamming(src, data)
 
   global apply_hamming
   apply_hamming = ~apply_hamming;
+
+  set_unsaved_changes(true);
 
   if (apply_hamming)
     set(src, 'checked', 'on');
@@ -300,6 +390,8 @@ function toggle_hanning(src, data)
   global apply_hanning
   apply_hanning = ~apply_hanning;
 
+  set_unsaved_changes(true);
+
   if (apply_hanning)
     set(src, 'checked', 'on');
   else
@@ -315,6 +407,8 @@ function toggle_zeromean(src, data)
 
   global zeromean
   zeromean = ~zeromean;
+
+  set_unsaved_changes(true);
 
   if (zeromean)
     set(src, 'checked', 'on');
@@ -334,6 +428,8 @@ function toggle_zeropad(src, data)
   global m_fft_zeropad
 
   zeropad = ~zeropad;
+
+  set_unsaved_changes(true);
 
   if (nargin < 2)
     src = m_fft_zeropad;
@@ -357,6 +453,8 @@ function toggle_visible(src, data)
 
   global only_visible
   only_visible = ~only_visible;
+
+  set_unsaved_changes(true);
 
   if (only_visible)
     set(src, 'checked', 'on');
@@ -398,6 +496,8 @@ function add_breakpoints(src, data)
   until (button == 115) % 115='s'
   title('');
 
+  set_unsaved_changes(true);
+
 end % function
 
 function toggle_flatten(src, data)
@@ -406,6 +506,8 @@ function toggle_flatten(src, data)
 
   global apply_bps
   apply_bps = ~apply_bps;
+
+  set_unsaved_changes(true);
 
   if (apply_bps)
     set(src, 'checked', 'on');
@@ -436,7 +538,7 @@ function create_figure(src, data, fig_no)
 
       fig_handles(fig_no) = figure("Name", "Timeseries", ...
                                    "Position", [winpos_x, winpos_y, winsize_x, winsize_y], ...
-                                   "DeleteFcn", {@destroy_figure, fig_no});
+                                   "CloseRequestFcn", {@close_figure, fig_no});
 
       if (isempty(period))
         plot_profile_enable_state = "off";
@@ -507,7 +609,7 @@ function create_figure(src, data, fig_no)
 
       fig_handles(fig_no) = figure("Name", "Fourier Transform", ...
                                    "Position", [winpos_x, winpos_y, winsize_x, winsize_y], ...
-                                   "DeleteFcn", {@destroy_figure, fig_no});
+                                   "CloseRequestFcn", {@close_figure, fig_no});
 
       %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
       % Set up menu for  FFT figure %
@@ -522,7 +624,7 @@ function create_figure(src, data, fig_no)
 
     case 3 % The profile figure
       fig_handles(fig_no) = figure("Name", "Profile", ...
-                                   "DeleteFcn", {@destroy_figure, fig_no});
+                                   "CloseRequestFcn", {@close_figure, fig_no});
 
       %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
       % Set up menu for profile figure %
@@ -534,7 +636,7 @@ function create_figure(src, data, fig_no)
 
     case 4 % The harmonic resolved fluctuation spectrum figure
       fig_handles(fig_no) = figure("Name", "Harmonic Resolved Fluctuation Spectrum", ...
-                                   "DeleteFcn", {@destroy_figure, fig_no});
+                                   "CloseRequestFcn", {@close_figure, fig_no});
 
       %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
       % Set up menu for HRFS figure %
@@ -554,7 +656,7 @@ function create_figure(src, data, fig_no)
 
     case 5 % The waterfall plot of the timeseries
       fig_handles(fig_no) = figure("Name", "Waterfall plot", ...
-                                   "DeleteFcn", {@destroy_figure, fig_no});
+                                   "CloseRequestFcn", {@close_figure, fig_no});
 
       %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
       % Set up menu for waterfall figure %
@@ -588,7 +690,7 @@ function create_figure(src, data, fig_no)
 
     case 6 % The 2DFS plot
       fig_handles(fig_no) = figure("Name", "2D Fluctuation Spectrum", ...
-                                   "DeleteFcn", {@destroy_figure, fig_no});
+                                   "CloseRequestFcn", {@close_figure, fig_no});
 
       m_tdfs_dynamicrange        = uimenu('label', '&Dynamic range');
       m_tdfs_dynamicrange_change = uimenu(m_tdfs_dynamicrange, ...
@@ -618,6 +720,10 @@ end % function
 function set_waterfall_plot_type(src, data, newvalue)
 
   global waterfall_plot_type
+
+  if (waterfall_plot_type ~= newvalue)
+    set_unsaved_changes(true);
+  end % if
 
   waterfall_plot_type = newvalue;
   plot_waterfall();
@@ -676,6 +782,8 @@ function change_dynamic_range(src, data, fig_no, minfactor, maxfactor)
     end % switch
   end % if
 
+  set_unsaved_changes(true);
+
   replot(fig_no, "none");
 
 end % function
@@ -689,24 +797,28 @@ function str = on_off(bool)
   end % if
 end % function
 
-function destroy_figure(src, data, fig_no)
+function close_figure(src, data, fig_no)
 
   global fig_handles
 
   if (fig_no == 1)
+
     % Check if there are unsaved changes
-    % ... (yet to implement)
+    if (~offer_to_save())
+      return
+    end % if
 
     % Close all (open) figures attached to this instance of FANSO
-    for fig_no = 2:length(fig_handles)
-      h = fig_handles(fig_no);
-      if (h)
-        close(h);
-      end % if
-    end % for
-  else
-    fig_handles(fig_no) = 0;
+    other_figures = logical(fig_handles);
+    other_figures(1) = false;
+    other_handles = fig_handles(other_figures);
+    delete(other_handles);
+    fig_handles(2:end) = 0;
+
   end % if
+
+  delete(fig_handles(fig_no));
+  fig_handles(fig_no) = 0;
 
 end % function
 
@@ -731,14 +843,7 @@ function plot_timeseries(src, data)
     create_figure(0,0,fig_no);
   end % if
 
-  % Create figure window title
-  if (isempty(filename))
-    figure_name = "Timeseries";
-  else
-    figure_name = ["Timeseries: ", filename];
-  end % if
-
-  figure(fig_handles(fig_no), "Name", figure_name);
+  figure(fig_handles(fig_no));
 
   % Calculate the values for the timeseries abscissa
   N = length(timeseries);
@@ -838,7 +943,8 @@ function select_period(src, data)
   cstr = inputdlg({"Harmonic number of selected point:"}, "Harmonic", 1, {"1"});
   if (~isempty(cstr))
     nharm = str2num(cstr{1});
-    set_period(nharm/x);
+    newperiod = nharm / x;
+    set_period(newperiod);
   end % if
 
   % Reset title
@@ -1109,6 +1215,8 @@ function clear_mask(src, data)
 
   flatten();
 
+  set_unsaved_changes(true);
+
   replot_all();
 end % function
 
@@ -1126,6 +1234,7 @@ function select_mask(src, data)
   [x2, y2, button2] = ginput(1);
 
   profile_mask = [x1,x2];
+  set_unsaved_changes(true);
   apply_profile_mask();
 
   % Update figures
@@ -1256,14 +1365,19 @@ end % function
 
 function set_period(newperiod)
 
-  % Change period
   global period
+
+  if (period ~= newperiod)
+    set_unsaved_changes(true);
+  end % if
+
+  % Change period
   period = newperiod;
 
   % Update the menu
   update_timeseries_menu();
 
-  % Update the plots
+  % Update the relevant plots
   replot(3);
   replot(4);
   replot(5);
@@ -1272,8 +1386,13 @@ end % function
 
 function set_nbins(newnbins)
 
-  % Change period
   global nprofile_bins
+
+  if (nprofile_bins ~= newnbins)
+    set_unsaved_changes(true);
+  end % if
+
+  % Change period
   nprofile_bins = newnbins;
 
   % Update the menu
@@ -1323,7 +1442,7 @@ function get_period_from_user(src, data)
 
   global period
 
-  cstr = inputdlg({"Enter period in seconds:"}, "Period", 1, {num2str(period)});
+  cstr = inputdlg({"Enter period in seconds:"}, "Period", 1, {num2str(period, 15)});
   if (~isempty(cstr))
     set_period(str2num(cstr{1}));
   end % if
