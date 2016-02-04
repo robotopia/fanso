@@ -76,15 +76,16 @@ function init_plot_variables()
   % Plot viewing parameters
   global fig_functions
   global plot_params
-  plot_params = nan(length(fig_functions), 12);
+  plot_params = nan(length(fig_functions), 13);
     % 12 plot parameters to be stored here are:
     %    xmin, xmax, ymin, ymax, zmin, zmax, cmin, cmax,  % <-- real numbers
     %    xlog, ylog, zlog,                                % <-- bools
-    %    cmap                                             % <-- integers
+    %    cmap, cinv                                       % <-- integers
   % Set log params to 0
   plot_params(:, 9:11) = 0;
   % Set cmap to grayscale
   plot_params(:, 12) = 8;
+  plot_params(:, 13) = 0;
 
   timeseries          = zeros(100,1);
   dt                  = 1;
@@ -372,11 +373,7 @@ function toggle_hamming(src, data)
 
   set_unsaved_changes(true);
 
-  if (apply_hamming)
-    set(src, 'checked', 'on');
-  else
-    set(src, 'checked', 'off');
-  end % if
+  set(src, 'checked', on_off(apply_hamming));
 
   % Redraw plots
   replot(2, "none");
@@ -390,11 +387,7 @@ function toggle_hanning(src, data)
 
   set_unsaved_changes(true);
 
-  if (apply_hanning)
-    set(src, 'checked', 'on');
-  else
-    set(src, 'checked', 'off');
-  end % if
+  set(src, 'checked', on_off(apply_hanning));
 
   % Redraw plots
   replot(2, "none");
@@ -408,11 +401,7 @@ function toggle_zeromean(src, data)
 
   set_unsaved_changes(true);
 
-  if (zeromean)
-    set(src, 'checked', 'on');
-  else
-    set(src, 'checked', 'off');
-  end % if
+  set(src, 'checked', on_off(zeromean));
 
   % Redraw plots
   replot(2, "none");
@@ -437,10 +426,9 @@ function toggle_zeropad(src, data)
     if (isempty(period))
       get_period_from_user();
     end % if
-    set(src, 'checked', 'on');
-  else
-    set(src, 'checked', 'off');
   end % if
+
+  set(src, 'checked', on_off(zeropad));
 
   % Redraw plots
   replot(2); % FFT
@@ -454,15 +442,24 @@ function toggle_visible(src, data)
 
   set_unsaved_changes(true);
 
-  if (only_visible)
-    set(src, 'checked', 'on');
-  else
-    set(src, 'checked', 'off');
-  end % if
+  set(src, 'checked', on_off(only_visible));
 
   % Redraw plots
   replot(2, "none");
   replot(4, "none");
+
+end % function
+
+function toggle_invert(src, data, fig_no)
+
+  global plot_params
+  plot_params(fig_no, 13) = ~plot_params(fig_no, 13);
+
+  set_unsaved_changes(true);
+
+  set(src, 'checked', on_off(plot_params(fig_no, 13)));
+
+  replot(fig_no, "none");
 
 end % function
 
@@ -640,7 +637,7 @@ function create_figure(src, data, fig_no)
       % Set up menu for HRFS figure %
       %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-      create_dynamicrange_menu(fig_no);
+      create_colormap_menu(fig_no);
 
     case 5 % The waterfall plot of the timeseries
       fig_handles(fig_no) = figure("Name", "Waterfall plot", ...
@@ -655,36 +652,44 @@ function create_figure(src, data, fig_no)
                                                   'callback', {@set_waterfall_plot_type, 0});
       m_waterfall_3D        = uimenu(m_waterfall, 'label', '3D', 'accelerator', '3', ...
                                                   'callback', {@set_waterfall_plot_type, 1});
-      create_dynamicrange_menu(fig_no);
+      create_colormap_menu(fig_no);
 
     case 6 % The 2DFS plot
       fig_handles(fig_no) = figure("Name", "2D Fluctuation Spectrum", ...
                                    "CloseRequestFcn", {@close_figure, fig_no});
-      create_dynamicrange_menu(fig_no);
+      create_colormap_menu(fig_no);
 
   end % switch
 
 end % function
 
-function create_dynamicrange_menu(fig_no)
+function create_colormap_menu(fig_no)
 
   global fig_handles
   figure(fig_handles(fig_no));
 
   % Parent menu
-  m_dynamicrange = uimenu('label', '&Dynamic range');
+  m_colormap = uimenu('label', '&Colormap');
 
   % Children menu items
-  uimenu(m_dynamicrange, 'label', 'Set dynamic range limits', ...
-                         'callback', {@scale_caxis, fig_no, 0, 0});
-  uimenu(m_dynamicrange, 'label', 'Increase Max by 10% of range', 'accelerator', '+', ...
-                         'separator', 'on', 'callback', {@scale_caxis, fig_no, 0,  0.1});
-  uimenu(m_dynamicrange, 'label', 'Decrease Max by 10% of range', 'accelerator', '_', ...
-                         'callback', {@scale_caxis, fig_no, 0, -0.1});
-  uimenu(m_dynamicrange, 'label', 'Increase Min by 10% of range', 'accelerator', '=', ...
-                         'callback', {@scale_caxis, fig_no,  0.1, 0});
-  uimenu(m_dynamicrange, 'label', 'Decrease Min by 10% of range', 'accelerator', '-', ...
-                         'callback', {@scale_caxis, fig_no, -0.1, 0});
+  m_type = uimenu(m_colormap, 'label', 'Type');
+
+  type_list = colormap("list");
+  for n = 1:length(type_list)
+    uimenu(m_type, 'label', type_list{n}, 'callback', {@set_colormap_type, fig_no, n});
+  end % for
+
+  uimenu(m_colormap, 'label', 'Invert', 'callback', {@toggle_invert, fig_no});
+  uimenu(m_colormap, 'label', 'Set dynamic range limits', 'separator', 'on', ...
+                     'callback', {@scale_caxis, fig_no, 0, 0});
+  uimenu(m_colormap, 'label', 'Increase Max by 10% of range', 'accelerator', '+', ...
+                     'callback', {@scale_caxis, fig_no, 0,  0.1});
+  uimenu(m_colormap, 'label', 'Decrease Max by 10% of range', 'accelerator', '_', ...
+                     'callback', {@scale_caxis, fig_no, 0, -0.1});
+  uimenu(m_colormap, 'label', 'Increase Min by 10% of range', 'accelerator', '=', ...
+                     'callback', {@scale_caxis, fig_no,  0.1, 0});
+  uimenu(m_colormap, 'label', 'Decrease Min by 10% of range', 'accelerator', '-', ...
+                     'callback', {@scale_caxis, fig_no, -0.1, 0});
 
 end % function
 
@@ -1075,18 +1080,9 @@ function plot_hrfs(src, data)
   xlabel('Frequency*P');
   ylabel('Harmonic Number');
   axis("xy");
-  colormap("gray");
+  apply_colormap(fig_no);
   colorbar('ylabel', 'Amplitude');
-  cmin = plot_params(fig_no, 7);
-  cmax = plot_params(fig_no, 8);
-  if (~isnan(cmin) && ~isnan(cmax))
-    caxis([cmin, cmax]);
-  else
-    cax = caxis();
-    plot_params(fig_no, 7) = cax(1);
-    plot_params(fig_no, 8) = cax(2);
-    set_unsaved_changes(true);
-  end % if
+  apply_axes(fig_no);
 
 end % function
 
@@ -1128,19 +1124,10 @@ function plot_waterfall(src, data)
   switch waterfall_plot_type
     case 0 % 2D
       imagesc(xs, ys, timeseries_grid);
-      colormap("gray");
+      apply_colormap(fig_no);
       axis("xy");
       colorbar();
-      cmin = plot_params(fig_no, 7);
-      cmax = plot_params(fig_no, 8);
-      if (~isnan(cmin) && ~isnan(cmax))
-        caxis([cmin, cmax]);
-      else
-        cax = caxis();
-        plot_params(fig_no, 7) = cax(1);
-        plot_params(fig_no, 8) = cax(2);
-        set_unsaved_changes(true);
-      end % if
+      apply_axes(fig_no);
     case 1 % 3D
       [Xs, Ys] = meshgrid(xs, ys);
       waterfall(Xs, Ys, timeseries_grid);
@@ -1190,19 +1177,10 @@ function plot_tdfs(src, data)
   ys = [-yshift:(yshift-1)] / nys;  % Units v_t * P1
 
   imagesc(xs, ys, tdfs);
-  colormap("gray");
+  apply_colormap(fig_no);
   axis("xy");
   colorbar();
-  cmin = plot_params(fig_no, 7);
-  cmax = plot_params(fig_no, 8);
-  if (~isnan(cmin) && ~isnan(cmax))
-    caxis([cmin, cmax]);
-  else
-    cax = caxis();
-    plot_params(fig_no, 7) = cax(1);
-    plot_params(fig_no, 8) = cax(2);
-    set_unsaved_changes(true);
-  end % if
+  apply_axes(fig_no);
 
   xlabel("2π ν_l P_1");
   ylabel("ν_t P_1");
@@ -1639,3 +1617,106 @@ function select_pulsarperiod(src, data)
 
 end % function
 
+function apply_axes(fig_no)
+
+  global plot_params
+  global fig_handles
+
+  % Switch to the appropriate figure
+  h = fig_handles(fig_no);
+  if (h)
+    figure(h);
+  else
+    return
+  end % if
+
+  % Apply xlim
+  xmin = plot_params(fig_no, 1);
+  xmax = plot_params(fig_no, 2);
+  if (~isnan(xmin) && ~isnan(xmax))
+    xlim([xmin, xmax]);
+  else
+    xax = xlim();
+    plot_params(fig_no, 1) = xax(1);
+    plot_params(fig_no, 2) = xax(2);
+    set_unsaved_changes(true);
+  end % if
+
+  % Apply ylim
+  ymin = plot_params(fig_no, 3);
+  ymax = plot_params(fig_no, 4);
+  if (~isnan(ymin) && ~isnan(ymax))
+    ylim([ymin, ymax]);
+  else
+    yax = ylim();
+    plot_params(fig_no, 3) = yax(1);
+    plot_params(fig_no, 4) = yax(2);
+    set_unsaved_changes(true);
+  end % if
+
+  % Apply zlim
+  ax = axis();
+  if (length(ax) == 6)
+    zmin = plot_params(fig_no, 5);
+    zmax = plot_params(fig_no, 6);
+    if (~isnan(zmin) && ~isnan(zmax))
+      zlim([zmin, zmax]);
+    else
+      zax = zlim();
+      plot_params(fig_no, 5) = zax(1);
+      plot_params(fig_no, 6) = zax(2);
+      set_unsaved_changes(true);
+    end % if
+  end % if
+
+  % Apply clim
+  cmin = plot_params(fig_no, 7);
+  cmax = plot_params(fig_no, 8);
+  if (~isnan(cmin) && ~isnan(cmax))
+    caxis([cmin, cmax]);
+  else
+    cax = clim();
+    plot_params(fig_no, 7) = cax(1);
+    plot_params(fig_no, 8) = cax(2);
+    set_unsaved_changes(true);
+  end % if
+
+end % function
+
+function apply_colormap(fig_no)
+
+  global plot_params
+  global fig_handles
+
+  % Switch to the appropriate figure
+  h = fig_handles(fig_no);
+  if (h)
+    figure(h);
+  else
+    return
+  end % if
+
+  colormap_name = colormap("list"){plot_params(fig_no, 12)};
+  to_be_inverted = plot_params(fig_no, 13);
+  cmap = colormap(colormap_name);
+  if (to_be_inverted)
+    colormap(flipud(cmap));
+  end
+
+end % function
+
+function set_colormap_type(src, data, fig_no, newtype)
+
+  global plot_params
+
+  curr_type = plot_params(fig_no, 12);
+
+  if (newtype ~= curr_type)
+    set_unsaved_changes(true);
+  end % if
+
+  plot_params(fig_no, 12) = newtype;
+
+  replot(fig_no, "none");
+
+end % function
