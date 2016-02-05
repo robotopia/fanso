@@ -58,9 +58,6 @@ function init_plot_variables()
   % The "main" global variables relating to the data themselves
   global dt                  % the time between samples in the timeseries (in seconds)
   global timeseries          % the original timeseries
-  global flattened           % timeseries flattened by linear detrending between breakpoints
-  global timeseries_grid     % timeseries recase into a grid (one pulse per row)
-  global breakpoint_mask     % (vector) 0 = do not use this value in calculating linear trends; 1 = use this value
   global profile_mask        % A pair of phases that define a region of phases to be ignored in the breakpoint linear fits
   global fft_plot_type       % 0 = amplitudes;  1 = power
   global waterfall_plot_type % 0 = 2D color;  1 = 3D heights
@@ -103,8 +100,6 @@ function init_plot_variables()
 
   timeseries          = zeros(100,1);
   dt                  = 1;
-  flattened           = zeros(size(timeseries));
-  breakpoint_mask     = ones(size(timeseries));
   profile_mask        = [0,0];
   fft_plot_type       = 0;
   waterfall_plot_type = 0;
@@ -676,12 +671,13 @@ function create_figure(src, data, fig_no)
       % Set up menu for waterfall figure %
       %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+      global m_waterfall_colormap
       m_plot     = create_plot_menu(fig_no);
       m_plot_2D  = uimenu(m_plot, 'label', '2D', 'accelerator', '2', 'separator', 'on', ...
                                   'callback', {@set_waterfall_plot_type, 0});
       m_plot_3D  = uimenu(m_plot, 'label', '3D', 'accelerator', '3', ...
                                   'callback', {@set_waterfall_plot_type, 1});
-      create_colormap_menu(fig_no);
+      m_waterfall_colormap = create_colormap_menu(fig_no);
 
     case 6 % The 2DFS plot
       fig_handles(fig_no) = figure("Name", "2D Fluctuation Spectrum", ...
@@ -711,7 +707,7 @@ function m_plot = create_plot_menu(fig_no, parent = 0)
 
 end % function
 
-function create_colormap_menu(fig_no)
+function m_colormap = create_colormap_menu(fig_no)
 
   global plot_params
   global fig_handles
@@ -746,13 +742,22 @@ end % function
 function set_waterfall_plot_type(src, data, newvalue)
 
   global waterfall_plot_type
+  global m_waterfall_colormap
 
   if (waterfall_plot_type ~= newvalue)
-    set_unsaved_changes(true);
-  end % if
 
-  waterfall_plot_type = newvalue;
-  plot_waterfall();
+    % Change the value!
+    waterfall_plot_type = newvalue;
+    set_unsaved_changes(true);
+
+    % Enable/Disable the colormap menu for 2D/3D waterfall plots
+    set(m_waterfall_colormap, "enable", on_off(~newvalue)); % 0 = 2D = menu ON;  1 = 3D = menu OFF
+
+    % Update the figure
+    get_axes(0,0,5);
+    replot(5);
+
+  end % if
 
 end % function
 
@@ -1634,7 +1639,8 @@ function set_fft_plot_type(src, data, newvalue)
 
   % Update FFT figure (with recalculated y-scale)
   get_axes(0,0,2);
-  plot_params(2,3:4) = plot_params(2,3:4) .^ exp_fact;
+  s = sign(plot_params(2,3:4));
+  plot_params(2,3:4) = s .* abs(plot_params(2,3:4) .^ exp_fact);
   replot(2);
 
 end % function
@@ -1820,6 +1826,9 @@ function apply_colormap(fig_no)
     return
   end % if
 
+  % For some reason, the listed colormaps don't change the SIZE
+  % of the existing colormap, so I have to do that explicitly:
+  colormap(zeros(64,3));
   colormap_name = colormap("list"){plot_params(fig_no, 13)};
   to_be_inverted = plot_params(fig_no, 14);
   cmap = colormap(colormap_name);
