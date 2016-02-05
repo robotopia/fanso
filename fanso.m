@@ -45,6 +45,9 @@ function fanso()
   % Draw the (empty) plot for the first time
   plot_timeseries();
 
+  % Initially, ensure that there are no changes to be saved
+  set_unsaved_changes(false);
+
 end % function
 
 function init_plot_variables()
@@ -94,6 +97,8 @@ function init_plot_variables()
   % Set cmap to grayscale
   plot_params(:, 13) = 8;
   plot_params(:, 14) = 0;
+  % Set profile plot x-axis to [0,1] (phase)
+  plot_params(3,1:2) = [0,1];
 
   timeseries          = zeros(100,1);
   dt                  = 1;
@@ -568,6 +573,9 @@ function create_figure(src, data, fig_no)
       m_data_import_ts     = uimenu(m_data, 'label', '&Import timeseries', 'separator', 'on', 'callback', @import_timeseries);
       m_data_change_dt     = uimenu(m_data, 'label', '&Change dt', 'callback', @change_dt);
 
+      % The Plot menu
+      m_plot               = create_plot_menu(fig_no);
+
       % The FFT menu
       global m_fft_window_hamming  m_fft_window_hanning  m_fft_zeromean  m_fft_zeropad  m_fft_visible
       m_fft                = uimenu('label', 'FF&T');
@@ -618,12 +626,12 @@ function create_figure(src, data, fig_no)
       % Set up menu for  FFT figure %
       %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-      m_fftplot           = uimenu('label', 'FF&T');
-      m_fftplot_abs       = uimenu(m_fftplot, 'label', 'Absolute value', 'callback', {@set_fft_plot_type, 0});
-      m_fftplot_abs       = uimenu(m_fftplot, 'label', 'Power', 'callback', {@set_fft_plot_type, 1});
+      m_plot           = create_plot_menu(fig_no);
+      m_plot_abs       = uimenu(m_plot, 'label', 'Absolute value', 'separator', 'on', 'callback', {@set_fft_plot_type, 0});
+      m_plot_power     = uimenu(m_plot, 'label', 'Power', 'callback', {@set_fft_plot_type, 1});
 
-      m_fftanalyse        = uimenu('label', '&Analyse');
-      m_fftanalyse_period = uimenu(m_fftanalyse, 'label', '&Select period (P1)', 'callback', @select_period);
+      m_analyse        = uimenu('label', '&Analyse');
+      m_analyse_period = uimenu(m_analyse, 'label', '&Select period (P1)', 'callback', @select_period);
 
     case 3 % The profile figure
       fig_handles(fig_no) = figure("Name", "Profile", ...
@@ -632,6 +640,8 @@ function create_figure(src, data, fig_no)
       %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
       % Set up menu for profile figure %
       %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+      create_plot_menu(fig_no);
 
       m_mask        = uimenu('label', '&Mask');
       m_mask_clear  = uimenu(m_mask, 'label', '&Clear', 'callback', @clear_mask);
@@ -645,6 +655,7 @@ function create_figure(src, data, fig_no)
       % Set up menu for HRFS figure %
       %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+      create_plot_menu(fig_no);
       create_colormap_menu(fig_no);
 
     case 5 % The waterfall plot of the timeseries
@@ -655,24 +666,44 @@ function create_figure(src, data, fig_no)
       % Set up menu for waterfall figure %
       %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-      m_waterfall           = uimenu('label', '&Waterfall plot');
-      m_waterfall_2D        = uimenu(m_waterfall, 'label', '2D', 'accelerator', '2', ...
-                                                  'callback', {@set_waterfall_plot_type, 0});
-      m_waterfall_3D        = uimenu(m_waterfall, 'label', '3D', 'accelerator', '3', ...
-                                                  'callback', {@set_waterfall_plot_type, 1});
+      m_plot     = create_plot_menu(fig_no);
+      m_plot_2D  = uimenu(m_plot, 'label', '2D', 'accelerator', '2', 'separator', 'on', ...
+                                  'callback', {@set_waterfall_plot_type, 0});
+      m_plot_3D  = uimenu(m_plot, 'label', '3D', 'accelerator', '3', ...
+                                  'callback', {@set_waterfall_plot_type, 1});
       create_colormap_menu(fig_no);
 
     case 6 % The 2DFS plot
       fig_handles(fig_no) = figure("Name", "2D Fluctuation Spectrum", ...
                                    "CloseRequestFcn", {@close_figure, fig_no});
+
+      create_plot_menu(fig_no);
       create_colormap_menu(fig_no);
 
   end % switch
 
 end % function
 
+function m_plot = create_plot_menu(fig_no, parent = 0)
+
+  global fig_handles
+  figure(fig_handles(fig_no));
+
+  % Plot menu
+  if (parent)
+    m_plot = uimenu(parent, 'label', 'Plot');
+  else
+    m_plot = uimenu('label', 'Plot');
+  end % if
+
+  % Children menu items
+  m_plot_save = uimenu(m_plot, 'label', 'Remember plot view', 'callback', {@get_axes, fig_no});
+
+end % function
+
 function create_colormap_menu(fig_no)
 
+  global plot_params
   global fig_handles
   figure(fig_handles(fig_no));
 
@@ -687,7 +718,8 @@ function create_colormap_menu(fig_no)
     uimenu(m_type, 'label', type_list{n}, 'callback', {@set_colormap_type, fig_no, n});
   end % for
 
-  uimenu(m_colormap, 'label', 'Invert', 'callback', {@toggle_invert, fig_no});
+  uimenu(m_colormap, 'label', 'Invert', 'checked', on_off(plot_params(fig_no, 14)), ...
+                     'callback', {@toggle_invert, fig_no});
   uimenu(m_colormap, 'label', 'Set dynamic range limits', 'separator', 'on', ...
                      'callback', {@scale_caxis, fig_no, 0, 0});
   uimenu(m_colormap, 'label', 'Increase Max by 10% of range', 'accelerator', '+', ...
@@ -921,6 +953,11 @@ function plot_timeseries(src, data)
   xlabel('Time (s)');
   ylabel('Timeseries values');
 
+  % Get/Set axis limits
+  if (~set_axes(fig_no))
+    get_axes(0,0,fig_no);
+  end % if
+
 end % function
 
 function plot_fft(src, data)
@@ -961,6 +998,11 @@ function plot_fft(src, data)
   plot(spectrum_freqs, to_be_plotted, 'b');
   xlabel('Frequency (Hz)');
   ylabel(ylabel_text);
+
+  % Get/Set axis limits
+  if (~set_axes(fig_no))
+    get_axes(0,0,fig_no);
+  end % if
 
 end % function
 
@@ -1016,12 +1058,13 @@ function plot_profile(src, data)
     create_figure(0,0,fig_no);
   end % if
 
-  figure(fig_handles(fig_no));
+  h = fig_handles(fig_no);
 
   % Calculate profile
   calc_profile();
 
   % Plot it up!
+  figure(h);
   hold off;
   dphase = 1/nprofile_bins;
   phase = [0:dphase:(1-dphase/2)]; % Ensure that there are the correct number of bins
@@ -1030,9 +1073,14 @@ function plot_profile(src, data)
   ylabel('Flux (arbitrary units)');
   profile_title = sprintf('Period = %.12f s;    No. of bins = %d', period, nprofile_bins);
   title(profile_title);
-  xlim([0,1]);
+
+  % Get/Set axis limits
+  if (~set_axes(fig_no))
+    get_axes(0,0,fig_no);
+  end % if
 
   % Shade the masked area
+  figure(h);
   ax = axis();
   ymin = ax(3);
   ymax = ax(4);
@@ -1097,7 +1145,11 @@ function plot_hrfs(src, data)
   axis("xy");
   apply_colormap(fig_no);
   colorbar('ylabel', 'Amplitude');
-  apply_axes(fig_no);
+
+  % Get/Set axis limits
+  if (~set_axes(fig_no))
+    get_axes(0,0,fig_no);
+  end % if
 
 end % function
 
@@ -1141,7 +1193,7 @@ function plot_waterfall(src, data)
       apply_colormap(fig_no);
       axis("xy");
       colorbar();
-      apply_axes(fig_no);
+
     case 1 % 3D
       [Xs, Ys] = meshgrid(xs, ys);
       waterfall(Xs, Ys, timeseries_grid);
@@ -1152,6 +1204,11 @@ function plot_waterfall(src, data)
 
   xlabel('Phase');
   ylabel('Pulse number');
+
+  % Get/Set axis limits
+  if (~set_axes(fig_no))
+    get_axes(0,0,fig_no);
+  end % if
 
 end % function
 
@@ -1188,14 +1245,22 @@ function plot_tdfs(src, data)
   %xs = [0:(nxs-1)]/period;        % Units of v_l * 2*pi*P1 ??
   ys = [-yshift:(yshift-1)] / nys;  % Units v_t * P1
 
+  % Draw plot
   imagesc(xs, ys, tdfs);
-  apply_colormap(fig_no);
   axis("xy");
-  colorbar();
-  apply_axes(fig_no);
 
+  % Draw colorbar
+  colorbar();
+  apply_colormap(fig_no);
+
+  % Set axis labels
   xlabel("2π ν_l P_1");
   ylabel("ν_t P_1");
+
+  % Get/Set axis limits
+  if (~set_axes(fig_no))
+    get_axes(0,0,fig_no);
+  end % if
 
 end % function
 
@@ -1629,16 +1694,14 @@ function select_pulsarperiod(src, data)
 
 end % function
 
-function apply_axes(fig_no)
+function get_axes(src, data, fig_no)
 
   global plot_params
   global fig_handles
 
-  % Switch to the appropriate figure
+  % Get the figure handle
   h = fig_handles(fig_no);
-  if (h)
-    figure(h);
-  else
+  if (~h)
     return
   end % if
 
@@ -1649,6 +1712,61 @@ function apply_axes(fig_no)
 
   for ax_no = 1:4
 
+    % Get the relevant axis function
+    thislim = all_lim{ax_no};
+
+    % Get plot_params indices
+    maxidx = ax_no * 2;
+    minidx = maxidx - 1;
+
+    % Ignore z axis if there IS no z axis
+    if ((ax_no == 3) && (length(axis()) ~= 6))
+      continue
+    end % if
+
+    % Set values to current figure's.
+    figure(h);
+    ax = thislim();
+
+    % Set unsaved changes flag, if necessary
+    if ((plot_params(fig_no, minidx) ~= ax(1)) || ...
+        (plot_params(fig_no, maxidx) ~= ax(2)))
+
+      set_unsaved_changes(true);
+
+    end % if
+
+    plot_params(fig_no, minidx) = ax(1);
+    plot_params(fig_no, maxidx) = ax(2);
+
+  end % for
+
+
+end % function
+
+function success = set_axes(fig_no)
+
+  global plot_params
+  global fig_handles
+
+  success = true; % This will get changed to false if there are any NaNs in plot_params
+
+  % Get the figure handle
+  h = fig_handles(fig_no);
+  if (~h)
+    return
+  end % if
+
+  % Set up "get axis" functions
+  all_lim = {@xlim, @ylim, @zlim, @caxis};
+
+  % Loop through x, y, z, and c axes and apply changes
+
+  for ax_no = 1:4
+
+    % Get the relevant axis function
+    thislim = all_lim{ax_no};
+
     % Get plot_params indices
     maxidx = ax_no * 2;
     minidx = maxidx - 1;
@@ -1656,9 +1774,6 @@ function apply_axes(fig_no)
     % Get current values from plot_params
     curr_min = plot_params(fig_no, minidx);
     curr_max = plot_params(fig_no, maxidx);
-
-    % Get the relevant axis function
-    thislim = all_lim{ax_no};
 
     % Ignore z axis if there IS no z axis
     if ((ax_no == 3) && (length(axis()) ~= 6))
@@ -1668,12 +1783,10 @@ function apply_axes(fig_no)
     % If values are good, apply to current figure.
     % Otherwise, set values to current figure's.
     if (~isnan(curr_min) && ~isnan(curr_max))
+      figure(h);
       thislim([curr_min, curr_max]);
     else
-      ax = thislim();
-      plot_params(fig_no, minidx) = ax(1);
-      plot_params(fig_no, maxidx) = ax(2);
-      set_unsaved_changes(true);
+      success = false;
     end % if
 
   end % for
