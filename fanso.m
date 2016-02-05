@@ -32,8 +32,9 @@ function fanso()
                              % (1) = timeseries plot
                              % (2) = FFT plot
                              % (3) = profile plot
-                             % (4) = harmonic resolved fluctuation spectrum plot
+                             % (4) = harmonic resolved fluctuation spectrum plot (HDFS)
                              % (5) = waterfall plot of timeseries modulo period
+                             % (6) = Two-dimensional fluctuation spectrum (2DFS)
   fig_functions = {@plot_timeseries, @plot_fft, @plot_profile, @plot_hrfs, @plot_waterfall, @plot_tdfs};
 
   % Initialise global variables relating to plots
@@ -59,7 +60,7 @@ function init_plot_variables()
   global timeseries          % the original timeseries
   global flattened           % timeseries flattened by linear detrending between breakpoints
   global timeseries_grid     % timeseries recase into a grid (one pulse per row)
-  global breakpoint_mask     % 0 = do not use this value in calculating linear trends; 1 = use this value
+  global breakpoint_mask     % (vector) 0 = do not use this value in calculating linear trends; 1 = use this value
   global profile_mask        % A pair of phases that define a region of phases to be ignored in the breakpoint linear fits
   global fft_plot_type       % 0 = amplitudes;  1 = power
   global waterfall_plot_type % 0 = 2D color;  1 = 3D heights
@@ -160,8 +161,6 @@ function save_data(filepathname)
   % Get all relevant global variables in this scope
   global dt
   global timeseries
-  global flattened
-  global breakpoint_mask
   global profile_mask
   global zeromean
   global zeropad
@@ -178,8 +177,6 @@ function save_data(filepathname)
   save(filepathname, ...
         "dt", ...
         "timeseries", ...
-        "flattened", ...
-        "breakpoint_mask", ...
         "profile_mask", ...
         "zeromean", ...
         "zeropad", ...
@@ -261,8 +258,6 @@ function load_fan(src, data)
   % Get all relevant global variables in this scope
   global dt
   global timeseries
-  global flattened
-  global breakpoint_mask
   global profile_mask
   global zeromean
   global zeropad
@@ -302,7 +297,7 @@ function load_fan(src, data)
       update_timeseries_menu();
 
       % (Re-)plot all
-      replot_all();
+      replot();
     catch
       errordlg({["Unable to load file \"", loadfile, "\""], lasterr()});
     end % try_catch
@@ -343,7 +338,7 @@ function import_timeseries(src, data)
       % Update menu checks and enables
       update_timeseries_menu();
 
-      replot_all();
+      replot();
     catch
       errordlg("This file is in an unreadable format.\nSee the '-ascii' option in Octave's load() function for details", ...
                "Open file error");
@@ -381,7 +376,7 @@ function set_sampling_rate(src, data)
     plot_params(2,1:2) = plot_params(2,1:2) / scale; % (i.e. inverse for FFT)
 
     % Update all figures (they will all be affected)
-    replot_all();
+    replot();
   end % if
 
 end % function
@@ -469,10 +464,9 @@ function toggle_visible(src, data)
   set(src, 'checked', on_off(only_visible));
 
   % Redraw plots
-  get_axes(0,0,[2,4,5]);
-  replot(2);
-  replot(4);
-  replot(5);
+  fig_nos = [2,4,5];
+  get_axes(0,0,fig_nos);
+  replot(fig_nos);
 
 end % function
 
@@ -540,7 +534,7 @@ function toggle_flatten(src, data)
 
   % Redraw plots
   get_axes();
-  replot_all();
+  replot();
 
 end % function
 
@@ -1323,7 +1317,7 @@ function clear_mask(src, data)
 
   % Update figures
   get_axes();
-  replot_all();
+  replot();
 
 end % function
 
@@ -1346,12 +1340,13 @@ function select_mask(src, data)
 
   % Update figures
   get_axes();
-  replot_all();
+  replot();
 
 end % function
 
 function apply_profile_mask()
 
+  global timeseries
   global profile_mask
   global breakpoint_mask
 
@@ -1359,7 +1354,7 @@ function apply_profile_mask()
   global dt
 
   % Calculate the phase of all the points in the timeseries
-  N = length(breakpoint_mask);
+  N = length(timeseries);
   t = [0:(N-1)]' * dt;
   phase = mod(t,period)/period;
 
@@ -1486,10 +1481,9 @@ function set_period(newperiod)
   update_timeseries_menu();
 
   % Update the relevant plots
-  get_axes(0,0,[3:5]);
-  replot(3);
-  replot(4);
-  replot(5);
+  fig_nos = [3,4,5];
+  get_axes(0,0,fig_nos);
+  replot(fig_nos);
 
 end % function
 
@@ -1645,7 +1639,7 @@ function set_fft_plot_type(src, data, newvalue)
 
 end % function
 
-function replot(fig_no)
+function replot(fig_nos = nan)
 % function: replot(fig_no, rescale = "none")
 %
 % rescale can be "none", "x", "y", or "xy"
@@ -1654,26 +1648,22 @@ function replot(fig_no)
   global fig_handles
   global fig_functions
 
-  % Get the handle for the figure
-  h = fig_handles(fig_no);
+  % The default value of NaN means to do ALL figures
+  if (isnan(fig_nos))
+    fig_nos = [1:length(fig_handles)];
+  end % if
 
-  % If the figure already exists and has an associated plot function
-  if ((fig_no <= length(fig_functions)) && (h ~= 0))
+  for fig_no = fig_nos
+
+    % Get the figure handle
+    h = fig_handles(fig_no);
+    if (~h)
+      continue
+    end % if
 
     % Run the plotting function
     fig_functions{fig_no}();
 
-  end % if
-
-end % function
-
-function replot_all()
-
-  global fig_handles
-
-  % Loop through the figure numbers
-  for fig_no = 1:length(fig_handles)
-    replot(fig_no);
   end % for
 
 end % function
