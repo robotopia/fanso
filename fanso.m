@@ -340,9 +340,6 @@ function import_timeseries(src, data)
       % Set the timeseries to the (first) column of values
       timeseries = mat(:,1);
 
-      % Mandate that they supply the sampling rate
-      change_dt();
-
       % Update menu checks and enables
       update_timeseries_menu();
 
@@ -355,23 +352,33 @@ function import_timeseries(src, data)
 
 end % function
 
-function change_dt(src, data)
+function set_sampling_rate(src, data)
 
-  global dt;
+  global dt
+  global plot_params
+  global fig_handles
 
   % Read in the new value via a dialog box
-  cstr = inputdlg({"Please enter the timestep in seconds:"}, "Set timestep", 1, {num2str(dt,15)});
+  cstr = inputdlg({"Please enter the sampling rate (Hz):"}, "Set sampling rate", 1, {num2str(1/dt,15)});
 
   if (~isempty(cstr))
-    newdt = str2num(cstr{1});
+    newfs = str2num(cstr{1});
 
     % Set unsaved changes flag
-    if (dt ~= newdt)
+    if (dt ~= 1/newfs)
       set_unsaved_changes(true);
     end % if
 
+    % Record the scale factor by which the dt value has changed
+    scale = 1/(newfs * dt);
+
     % Update value
-    dt = newdt;
+    dt = 1/newfs;
+
+    % Rescale x axis of affected plots
+    get_axes(0,0,[1:2]);
+    plot_params(1,1:2) = plot_params(1,1:2) * scale;
+    plot_params(2,1:2) = plot_params(2,1:2) / scale; % (i.e. inverse for FFT)
 
     % Update all figures (they will all be affected)
     replot_all();
@@ -389,7 +396,8 @@ function toggle_hamming(src, data)
   set(src, 'checked', on_off(apply_hamming));
 
   % Redraw plots
-  replot(2, "none");
+  get_axes(0,0,2);
+  replot(2);
 
 end % function
 
@@ -403,7 +411,8 @@ function toggle_hanning(src, data)
   set(src, 'checked', on_off(apply_hanning));
 
   % Redraw plots
-  replot(2, "none");
+  get_axes(0,0,2);
+  replot(2);
 
 end % function
 
@@ -417,7 +426,8 @@ function toggle_zeromean(src, data)
   set(src, 'checked', on_off(zeromean));
 
   % Redraw plots
-  replot(2, "none");
+  get_axes(0,0,2);
+  replot(2);
 
 end % function
 
@@ -444,6 +454,7 @@ function toggle_zeropad(src, data)
   set(src, 'checked', on_off(zeropad));
 
   % Redraw plots
+  get_axes(0,0,2);
   replot(2); % FFT
 
 end % function
@@ -458,8 +469,10 @@ function toggle_visible(src, data)
   set(src, 'checked', on_off(only_visible));
 
   % Redraw plots
-  replot(2, "none");
-  replot(4, "none");
+  get_axes(0,0,[2,4,5]);
+  replot(2);
+  replot(4);
+  replot(5);
 
 end % function
 
@@ -472,7 +485,8 @@ function toggle_invert(src, data, fig_no)
 
   set(src, 'checked', on_off(plot_params(fig_no, 14)));
 
-  replot(fig_no, "none");
+  get_axes(0,0,fig_no);
+  replot(fig_no);
 
 end % function
 
@@ -500,7 +514,8 @@ function add_breakpoints(src, data)
           breakpoints = setdiff(breakpoints, breakpoints(nearest_idx));
         end
     end % switch
-    replot(1, "none");
+    get_axes(0,0,1);
+    replot(1);
   until (button == 115) % 115='s'
   title('');
 
@@ -524,7 +539,8 @@ function toggle_flatten(src, data)
   end % if
 
   % Redraw plots
-  replot_all("none");
+  get_axes();
+  replot_all();
 
 end % function
 
@@ -571,7 +587,7 @@ function create_figure(src, data, fig_no)
       m_data_save          = uimenu(m_data, 'label', '&Save', 'callback', @save_fan);
       m_data_saveas        = uimenu(m_data, 'label', 'Save &As', 'callback', @saveas_fan);
       m_data_import_ts     = uimenu(m_data, 'label', '&Import timeseries', 'separator', 'on', 'callback', @import_timeseries);
-      m_data_change_dt     = uimenu(m_data, 'label', '&Change dt', 'callback', @change_dt);
+      m_data_samplerate    = uimenu(m_data, 'label', 'Set sampling &rate', 'callback', @set_sampling_rate);
 
       % The Plot menu
       m_plot               = create_plot_menu(fig_no);
@@ -818,7 +834,7 @@ function set_axis(fig_no, axis_char, newmin = NaN, newmax = NaN)
     return
   end % try_catch
 
-  replot(fig_no, "none");
+  replot(fig_no);
 
 end % function
 
@@ -1294,6 +1310,7 @@ function reshape_timeseries_into_grid()
 end % function
 
 function clear_mask(src, data)
+
   global profile_mask
   global breakpoint_mask
 
@@ -1304,7 +1321,10 @@ function clear_mask(src, data)
 
   set_unsaved_changes(true);
 
+  % Update figures
+  get_axes();
   replot_all();
+
 end % function
 
 function select_mask(src, data)
@@ -1325,6 +1345,7 @@ function select_mask(src, data)
   apply_profile_mask();
 
   % Update figures
+  get_axes();
   replot_all();
 
 end % function
@@ -1465,6 +1486,7 @@ function set_period(newperiod)
   update_timeseries_menu();
 
   % Update the relevant plots
+  get_axes(0,0,[3:5]);
   replot(3);
   replot(4);
   replot(5);
@@ -1486,6 +1508,7 @@ function set_nbins(newnbins)
   update_timeseries_menu();
 
   % Update the plots
+  get_axes(0,0,3);
   replot(3);
 
 end % function
@@ -1606,14 +1629,23 @@ end % function
 
 function set_fft_plot_type(src, data, newvalue)
 
+  global plot_params
   global fft_plot_type
+
+  % Calculate "exponent factor" (used for calculating how to change y-scale
+  exp_fact = (newvalue + 1) / (fft_plot_type + 1);
+
+  % Change the value
   fft_plot_type = newvalue;
 
-  replot(2, "y");
+  % Update FFT figure (with recalculated y-scale)
+  get_axes(0,0,2);
+  plot_params(2,3:4) = plot_params(2,3:4) .^ exp_fact;
+  replot(2);
 
 end % function
 
-function replot(fig_no, rescale = "xy")
+function replot(fig_no)
 % function: replot(fig_no, rescale = "none")
 %
 % rescale can be "none", "x", "y", or "xy"
@@ -1628,36 +1660,20 @@ function replot(fig_no, rescale = "xy")
   % If the figure already exists and has an associated plot function
   if ((fig_no <= length(fig_functions)) && (h ~= 0))
 
-    % Save the old axis info
-    figure(h);
-    ax = axis();
-
     % Run the plotting function
     fig_functions{fig_no}();
-
-    % Update the axis
-    figure(h);
-    switch rescale
-      case "none"
-        axis(ax);
-      case "x"
-        ylim([ax(3), ax(4)]);
-      case "y"
-        xlim([ax(1), ax(2)]);
-      % case "xy" happens naturally
-    end % switch
 
   end % if
 
 end % function
 
-function replot_all(rescale = "xy")
+function replot_all()
 
   global fig_handles
 
   % Loop through the figure numbers
   for fig_no = 1:length(fig_handles)
-    replot(fig_no, rescale);
+    replot(fig_no);
   end % for
 
 end % function
@@ -1694,53 +1710,61 @@ function select_pulsarperiod(src, data)
 
 end % function
 
-function get_axes(src, data, fig_no)
+function get_axes(src, data, fig_nos = nan)
 
   global plot_params
   global fig_handles
 
-  % Get the figure handle
-  h = fig_handles(fig_no);
-  if (~h)
-    return
+  % The default value of NaN means to do ALL figures
+  if (isnan(fig_nos))
+    fig_nos = [1:length(fig_handles)];
   end % if
 
-  % Set up "get axis" functions
-  all_lim = {@xlim, @ylim, @zlim, @caxis};
+  for fig_no = fig_nos
 
-  % Loop through x, y, z, and c axes and apply changes
-
-  for ax_no = 1:4
-
-    % Get the relevant axis function
-    thislim = all_lim{ax_no};
-
-    % Get plot_params indices
-    maxidx = ax_no * 2;
-    minidx = maxidx - 1;
-
-    % Ignore z axis if there IS no z axis
-    if ((ax_no == 3) && (length(axis()) ~= 6))
+    % Get the figure handle
+    h = fig_handles(fig_no);
+    if (~h)
       continue
     end % if
 
-    % Set values to current figure's.
-    figure(h);
-    ax = thislim();
+    % Set up "get axis" functions
+    all_lim = {@xlim, @ylim, @zlim, @caxis};
 
-    % Set unsaved changes flag, if necessary
-    if ((plot_params(fig_no, minidx) ~= ax(1)) || ...
-        (plot_params(fig_no, maxidx) ~= ax(2)))
+    % Loop through x, y, z, and c axes and apply changes
 
-      set_unsaved_changes(true);
+    for ax_no = 1:4
 
-    end % if
+      % Get the relevant axis function
+      thislim = all_lim{ax_no};
 
-    plot_params(fig_no, minidx) = ax(1);
-    plot_params(fig_no, maxidx) = ax(2);
+      % Get plot_params indices
+      maxidx = ax_no * 2;
+      minidx = maxidx - 1;
+
+      % Ignore z axis if there IS no z axis
+      if ((ax_no == 3) && (length(axis()) ~= 6))
+        continue
+      end % if
+
+      % Set values to current figure's.
+      figure(h);
+      ax = thislim();
+
+      % Set unsaved changes flag, if necessary
+      if ((plot_params(fig_no, minidx) ~= ax(1)) || ...
+          (plot_params(fig_no, maxidx) ~= ax(2)))
+
+        set_unsaved_changes(true);
+
+      end % if
+
+      plot_params(fig_no, minidx) = ax(1);
+      plot_params(fig_no, maxidx) = ax(2);
+
+    end % for
 
   end % for
-
 
 end % function
 
@@ -1827,6 +1851,7 @@ function set_colormap_type(src, data, fig_no, newtype)
 
   plot_params(fig_no, 13) = newtype;
 
-  replot(fig_no, "none");
+  get_axes();
+  replot(fig_no);
 
 end % function
