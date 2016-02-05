@@ -6,7 +6,15 @@ function fanso()
 %     Written by Sam McSweeney, 2016, Creative Commons Licence
 %     sammy.mcsweeney@gmail.com
 
-  clear -global
+  % First, check if there is already an instance of FANSO open
+  global FANSO_INSTANCE
+  if (isempty(FANSO_INSTANCE)) % i.e. there is NO instance already open
+    FANSO_INSTANCE = 1;
+  else
+    % Simply switch to the main figure
+    disp('FANSO already running');
+    return
+  end
 
   % Require that we are using the correct graphics toolkit (FLTK)
   gtk = 'fltk';
@@ -834,10 +842,19 @@ function close_figure(src, data, fig_no)
     delete(other_handles);
     fig_handles(2:end) = 0;
 
-  end % if
+    % Get rid of all global variables
+    clear -global
 
-  delete(src);
-  fig_handles(fig_no) = 0;
+    % Close this figure
+    delete(src);
+
+  else
+
+    % Close just this figure and set the handle to 0
+    delete(src);
+    fig_handles(fig_no) = 0;
+
+  end % if
 
 end % function
 
