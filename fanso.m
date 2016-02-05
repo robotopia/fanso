@@ -76,16 +76,16 @@ function init_plot_variables()
   % Plot viewing parameters
   global fig_functions
   global plot_params
-  plot_params = nan(length(fig_functions), 13);
+  plot_params = nan(length(fig_functions), 14);
     % 12 plot parameters to be stored here are:
     %    xmin, xmax, ymin, ymax, zmin, zmax, cmin, cmax,  % <-- real numbers
-    %    xlog, ylog, zlog,                                % <-- bools
+    %    xlog, ylog, zlog, clog                           % <-- bools
     %    cmap, cinv                                       % <-- integers
   % Set log params to 0
-  plot_params(:, 9:11) = 0;
+  plot_params(:, 9:12) = 0;
   % Set cmap to grayscale
-  plot_params(:, 12) = 8;
-  plot_params(:, 13) = 0;
+  plot_params(:, 13) = 8;
+  plot_params(:, 14) = 0;
 
   timeseries          = zeros(100,1);
   dt                  = 1;
@@ -453,11 +453,11 @@ end % function
 function toggle_invert(src, data, fig_no)
 
   global plot_params
-  plot_params(fig_no, 13) = ~plot_params(fig_no, 13);
+  plot_params(fig_no, 14) = ~plot_params(fig_no, 14);
 
   set_unsaved_changes(true);
 
-  set(src, 'checked', on_off(plot_params(fig_no, 13)));
+  set(src, 'checked', on_off(plot_params(fig_no, 14)));
 
   replot(fig_no, "none");
 
@@ -836,7 +836,7 @@ function close_figure(src, data, fig_no)
 
   end % if
 
-  delete(fig_handles(fig_no));
+  delete(src);
   fig_handles(fig_no) = 0;
 
 end % function
@@ -1042,8 +1042,6 @@ function plot_hrfs(src, data)
   global spectrum_freqs
   global spectrum_vals
 
-  global plot_params
-
   % Switch to/Create HRFS figure and keep track of the view window
   fig_no = 4;
   first_time = (fig_handles(fig_no) == 0);
@@ -1094,7 +1092,6 @@ function plot_waterfall(src, data)
   global timeseries_grid
 
   global waterfall_plot_type
-  global plot_params
 
   % Make sure the period has been set
   if (isempty(period))
@@ -1147,8 +1144,6 @@ function plot_tdfs(src, data)
 
   global timeseries_grid
   global period
-
-  global plot_params
 
   % Switch to/Create HRFS figure and keep track of the view window
   fig_no = 6;
@@ -1630,56 +1625,41 @@ function apply_axes(fig_no)
     return
   end % if
 
-  % Apply xlim
-  xmin = plot_params(fig_no, 1);
-  xmax = plot_params(fig_no, 2);
-  if (~isnan(xmin) && ~isnan(xmax))
-    xlim([xmin, xmax]);
-  else
-    xax = xlim();
-    plot_params(fig_no, 1) = xax(1);
-    plot_params(fig_no, 2) = xax(2);
-    set_unsaved_changes(true);
-  end % if
+  % Set up "get axis" functions
+  all_lim = {@xlim, @ylim, @zlim, @caxis};
 
-  % Apply ylim
-  ymin = plot_params(fig_no, 3);
-  ymax = plot_params(fig_no, 4);
-  if (~isnan(ymin) && ~isnan(ymax))
-    ylim([ymin, ymax]);
-  else
-    yax = ylim();
-    plot_params(fig_no, 3) = yax(1);
-    plot_params(fig_no, 4) = yax(2);
-    set_unsaved_changes(true);
-  end % if
+  % Loop through x, y, z, and c axes and apply changes
 
-  % Apply zlim
-  ax = axis();
-  if (length(ax) == 6)
-    zmin = plot_params(fig_no, 5);
-    zmax = plot_params(fig_no, 6);
-    if (~isnan(zmin) && ~isnan(zmax))
-      zlim([zmin, zmax]);
+  for ax_no = 1:4
+
+    % Get plot_params indices
+    maxidx = ax_no * 2;
+    minidx = maxidx - 1;
+
+    % Get current values from plot_params
+    curr_min = plot_params(fig_no, minidx);
+    curr_max = plot_params(fig_no, maxidx);
+
+    % Get the relevant axis function
+    thislim = all_lim{ax_no};
+
+    % Ignore z axis if there IS no z axis
+    if ((ax_no == 3) && (length(axis()) ~= 6))
+      continue
+    end % if
+
+    % If values are good, apply to current figure.
+    % Otherwise, set values to current figure's.
+    if (~isnan(curr_min) && ~isnan(curr_max))
+      thislim([curr_min, curr_max]);
     else
-      zax = zlim();
-      plot_params(fig_no, 5) = zax(1);
-      plot_params(fig_no, 6) = zax(2);
+      ax = thislim();
+      plot_params(fig_no, minidx) = ax(1);
+      plot_params(fig_no, maxidx) = ax(2);
       set_unsaved_changes(true);
     end % if
-  end % if
 
-  % Apply clim
-  cmin = plot_params(fig_no, 7);
-  cmax = plot_params(fig_no, 8);
-  if (~isnan(cmin) && ~isnan(cmax))
-    caxis([cmin, cmax]);
-  else
-    cax = clim();
-    plot_params(fig_no, 7) = cax(1);
-    plot_params(fig_no, 8) = cax(2);
-    set_unsaved_changes(true);
-  end % if
+  end % for
 
 end % function
 
@@ -1696,8 +1676,8 @@ function apply_colormap(fig_no)
     return
   end % if
 
-  colormap_name = colormap("list"){plot_params(fig_no, 12)};
-  to_be_inverted = plot_params(fig_no, 13);
+  colormap_name = colormap("list"){plot_params(fig_no, 13)};
+  to_be_inverted = plot_params(fig_no, 14);
   cmap = colormap(colormap_name);
   if (to_be_inverted)
     colormap(flipud(cmap));
@@ -1709,13 +1689,13 @@ function set_colormap_type(src, data, fig_no, newtype)
 
   global plot_params
 
-  curr_type = plot_params(fig_no, 12);
+  curr_type = plot_params(fig_no, 13);
 
   if (newtype ~= curr_type)
     set_unsaved_changes(true);
   end % if
 
-  plot_params(fig_no, 12) = newtype;
+  plot_params(fig_no, 13) = newtype;
 
   replot(fig_no, "none");
 
