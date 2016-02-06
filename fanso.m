@@ -85,16 +85,18 @@ function init_plot_variables()
   % Plot viewing parameters
   global fig_functions
   global plot_params
-  plot_params = nan(length(fig_functions), 14);
+  plot_params = nan(length(fig_functions), 18);
     % 12 plot parameters to be stored here are:
     %    xmin, xmax, ymin, ymax, zmin, zmax, cmin, cmax,  % <-- real numbers
-    %    xlog, ylog, zlog, clog                           % <-- bools
-    %    cmap, cinv                                       % <-- integers
+    %    xlog, ylog, zlog, clog,                          % <-- bools
+    %    xexp, yexp, zexp, cexp,                          % <-- real numbers
+    %    cmap,                                            % <-- integers
+    %    cinv                                             % <-- bools
   % Set log params to 0
   plot_params(:, 9:12) = 0;
   % Set cmap to grayscale
-  plot_params(:, 13) = 8;
-  plot_params(:, 14) = 0;
+  plot_params(:, 17) = 8;
+  plot_params(:, 18) = 0;
   % Set profile plot x-axis to [0,1] (phase)
   plot_params(3,1:2) = [0,1];
 
@@ -474,11 +476,11 @@ end % function
 function toggle_invert(src, data, fig_no)
 
   global plot_params
-  plot_params(fig_no, 14) = ~plot_params(fig_no, 14);
+  plot_params(fig_no, 18) = ~plot_params(fig_no, 18);
 
   set_unsaved_changes(true);
 
-  set(src, 'checked', on_off(plot_params(fig_no, 14)));
+  set(src, 'checked', on_off(plot_params(fig_no, 18)));
 
   get_axes(0,0,fig_no);
   replot(fig_no);
@@ -638,8 +640,6 @@ function create_figure(src, data, fig_no)
       %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
       m_plot           = create_plot_menu(fig_no);
-      m_plot_abs       = uimenu(m_plot, 'label', 'Absolute value', 'separator', 'on', 'callback', {@set_fft_plot_type, 0});
-      m_plot_power     = uimenu(m_plot, 'label', 'Power', 'callback', {@set_fft_plot_type, 1});
 
       m_analyse        = uimenu('label', '&Analyse');
       m_analyse_period = uimenu(m_analyse, 'label', '&Select period (P1)', 'callback', @select_period);
@@ -711,6 +711,12 @@ function m_plot = create_plot_menu(fig_no, parent = 0)
   % Children menu items
   m_plot_save = uimenu(m_plot, 'label', 'Remember plot view', 'callback', {@get_axes, fig_no});
 
+  % For FFT plots, allow option of plotting absolute values or power
+  if (any(fig_no == [2,4,6])) % 2, 4, 6 are the FFT plots
+    m_plot_abs       = uimenu(m_plot, 'label', 'Absolute value', 'separator', 'on', 'callback', {@set_fft_plot_type, fig_no, nan});
+    m_plot_power     = uimenu(m_plot, 'label', 'Power', 'callback', {@set_fft_plot_type, fig_no, 2});
+  end
+
 end % function
 
 function m_colormap = create_colormap_menu(fig_no)
@@ -730,7 +736,7 @@ function m_colormap = create_colormap_menu(fig_no)
     uimenu(m_type, 'label', type_list{n}, 'callback', {@set_colormap_type, fig_no, n});
   end % for
 
-  uimenu(m_colormap, 'label', 'Invert', 'checked', on_off(plot_params(fig_no, 14)), ...
+  uimenu(m_colormap, 'label', 'Invert', 'checked', on_off(plot_params(fig_no, 18)), ...
                      'callback', {@toggle_invert, fig_no});
   uimenu(m_colormap, 'label', 'Set dynamic range limits', 'separator', 'on', ...
                      'callback', {@scale_caxis, fig_no, 0, 0});
@@ -987,7 +993,8 @@ function plot_fft(src, data)
 
   global spectrum_freqs
   global spectrum_vals
-  global fft_plot_type
+
+  global plot_params
 
   % Switch to/Create FFT figure and keep track of the view window
   fig_no = 2;
@@ -1001,18 +1008,14 @@ function plot_fft(src, data)
 
   % Calculate the FFT
   calc_fft();
+  to_be_plotted = abs(spectrum_vals);
+  ylabel_text   = 'Amplitude';
 
-  % What kind of plot?
-  switch fft_plot_type
-    case 0 % Plot absolute values
-      to_be_plotted = abs(spectrum_vals);
-      ylabel_text = 'Amplitude';
-    case 1 % Plot power spectrum
-      to_be_plotted = abs(spectrum_vals).^2;
-      ylabel_text = 'Power';
-    otherwise
-      error("Unknown FFT plot type");
-  end % switch
+  % Are we plotting power instead?
+  if (plot_params(fig_no, 14) == 2)
+    to_be_plotted .^= 2;
+    ylabel_text = 'Power';
+  end % if
 
   % Plot up the FFT
   figure(fig_handles(fig_no));
@@ -1128,6 +1131,8 @@ function plot_hrfs(src, data)
   global spectrum_freqs
   global spectrum_vals
 
+  global plot_params
+
   % Switch to/Create HRFS figure and keep track of the view window
   fig_no = 4;
   first_time = (fig_handles(fig_no) == 0);
@@ -1145,9 +1150,16 @@ function plot_hrfs(src, data)
 
   % Calculate the FFT
   calc_fft();
+  to_be_plotted = abs(spectrum_vals);
+  clabel_text   = 'Amplitude';
+
+  % Are we plotting power instead?
+  if (plot_params(fig_no, 16) == 2)
+    to_be_plotted .^= 2;
+    clabel_text = 'Power';
+  end % if
 
   % Prepare the matrix of values
-  to_be_plotted = abs(spectrum_vals);
   N             = length(to_be_plotted);
   nx            = round(N*dt/period);
   ny            = floor(N/(2*nx));
@@ -1164,8 +1176,8 @@ function plot_hrfs(src, data)
   xlabel('Frequency*P');
   ylabel('Harmonic Number');
   axis("xy");
+  colorbar('ylabel', clabel_text);
   apply_colormap(fig_no);
-  colorbar('ylabel', 'Amplitude');
 
   % Get/Set axis limits
   if (~set_axes(fig_no))
@@ -1236,6 +1248,7 @@ end % function
 function plot_tdfs(src, data)
 
   global fig_handles
+  global plot_params
 
   global timeseries_grid
   global period
@@ -1253,6 +1266,13 @@ function plot_tdfs(src, data)
   % Calculate the 2DFS
   reshape_timeseries_into_grid();
   tdfs = abs(fft2(timeseries_grid));
+  clabel_text   = 'Amplitude';
+
+  % Are we plotting power instead?
+  if (plot_params(fig_no, 16) == 2)
+    tdfs .^= 2;
+    clabel_text = 'Power';
+  end % if
 
   % Chop off the right half (= conjugate of left half for real signal)
   % and rotate vertically so that DC is in centre of grid
@@ -1271,7 +1291,7 @@ function plot_tdfs(src, data)
   axis("xy");
 
   % Draw colorbar
-  colorbar();
+  colorbar('ylabel', clabel_text);
   apply_colormap(fig_no);
 
   % Set axis labels
@@ -1632,22 +1652,38 @@ function flatten()
 
 end % function
 
-function set_fft_plot_type(src, data, newvalue)
+function set_fft_plot_type(src, data, fig_no, newexp)
 
   global plot_params
-  global fft_plot_type
 
-  % Calculate "exponent factor" (used for calculating how to change y-scale
-  exp_fact = (newvalue + 1) / (fft_plot_type + 1);
+  % Decide if we're changing the y-axis or the c-axis
+  switch fig_no
+    case 2 % FFT plot
+      exp_idx = 14; % yexp column in plot_params
+      min_idx = 3;  % ymin    "    "      "
+      max_idx = 4;  % ymax    "    "      "
+    case {4,6} % HDFS, 2DFS
+      exp_idx = 16; % cexp column in plot_params
+      min_idx = 7;  % cmin    "    "      "
+      max_idx = 8;  % cmax    "    "      "
+    otherwise
+      return % Currently, cannot change this plot parameter for other types of plots
+  end % switch
+
+  oldexp_val = ~isnan(plot_params(fig_no, exp_idx)) + 1; % NaN --> 1;  2 --> 2
+  newexp_val = ~isnan(newexp) + 1;
+
+  % Calculate "exponent factor" (used for calculating how to change axis scale)
+  exp_fact = newexp_val / oldexp_val;
 
   % Change the value
-  fft_plot_type = newvalue;
+  plot_params(fig_no, exp_idx) = newexp;
 
-  % Update FFT figure (with recalculated y-scale)
-  get_axes(0,0,2);
-  s = sign(plot_params(2,3:4));
-  plot_params(2,3:4) = s .* abs(plot_params(2,3:4) .^ exp_fact);
-  replot(2);
+  % Update figure (with recalculated axes)
+  get_axes(0,0,fig_no);
+  s = sign(plot_params(fig_no,min_idx:max_idx));
+  plot_params(fig_no,min_idx:max_idx) = s .* abs(plot_params(fig_no,min_idx:max_idx) .^ exp_fact);
+  replot(fig_no);
 
 end % function
 
@@ -1831,8 +1867,8 @@ function apply_colormap(fig_no)
   % For some reason, the listed colormaps don't change the SIZE
   % of the existing colormap, so I have to do that explicitly:
   colormap(zeros(64,3));
-  colormap_name = colormap("list"){plot_params(fig_no, 13)};
-  to_be_inverted = plot_params(fig_no, 14);
+  colormap_name = colormap("list"){plot_params(fig_no, 17)};
+  to_be_inverted = plot_params(fig_no, 18);
   cmap = colormap(colormap_name);
   if (to_be_inverted)
     colormap(flipud(cmap));
@@ -1844,13 +1880,13 @@ function set_colormap_type(src, data, fig_no, newtype)
 
   global plot_params
 
-  curr_type = plot_params(fig_no, 13);
+  curr_type = plot_params(fig_no, 17);
 
   if (newtype ~= curr_type)
     set_unsaved_changes(true);
   end % if
 
-  plot_params(fig_no, 13) = newtype;
+  plot_params(fig_no, 17) = newtype;
 
   get_axes();
   replot(fig_no);
