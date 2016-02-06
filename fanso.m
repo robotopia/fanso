@@ -169,7 +169,8 @@ function save_data(filepathname)
   global plot_params
 
   % Save all the info!
-  save(filepathname, ...
+  save("-binary", ...
+        filepathname, ...
         "dt", ...
         "timeseries", ...
         "profile_mask", ...
@@ -279,7 +280,7 @@ function load_fan(src, data)
   if (~strcmp(loadpath, "0")) % then they actually selected a file
     try
       % Load file contents
-      load("-text", [loadpath, loadfile]);
+      load("-binary", [loadpath, loadfile]);
 
       % Store file name + path in global variables
       filename = loadfile;
@@ -290,6 +291,11 @@ function load_fan(src, data)
 
       % Update menu checks and enables
       update_timeseries_menu();
+
+      % If necessary, apply the profile mask
+      if (any(profile_mask)) % (i.e. profile mask is set -- profile_mask ~= [0,0])
+        apply_profile_mask();
+      end % if
 
       % (Re-)plot all
       replot();
@@ -1646,10 +1652,6 @@ function set_fft_plot_type(src, data, newvalue)
 end % function
 
 function replot(fig_nos = nan)
-% function: replot(fig_no, rescale = "none")
-%
-% rescale can be "none", "x", "y", or "xy"
-%
 
   global fig_handles
   global fig_functions
