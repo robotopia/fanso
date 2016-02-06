@@ -487,6 +487,50 @@ function toggle_invert(src, data, fig_no)
 
 end % function
 
+function toggle_log(src, data, fig_no, axis_char)
+
+  global plot_params
+
+  % Get appropriate column numbers for plot_params
+  axis_no  = find(axis_char == "xyzc");
+  axis_idx = axis_no + 8; % x --> 9; y --> 10; z --> 11; c --> 12
+  max_idx = axis_no * 2;  % x --> 2; y --> 4;  z --> 6;  c --> 8
+  min_idx = max_idx - 1;  % x --> 1; y --> 3;  z --> 5;  c --> 7
+
+  % Toggle the "log" flag
+  islog = ~plot_params(fig_no, axis_idx);
+  plot_params(fig_no, axis_idx) = islog;
+
+  set_unsaved_changes(true);
+
+  set(src, 'checked', on_off(islog));
+
+  % Recalculate axis limits
+  get_axes(0,0,fig_no);
+
+  if (islog)
+    % If values are negative, enforce positive
+    if (plot_params(fig_no, min_idx) <= 0)
+      plot_params(fig_no, min_idx) = eps; % eps = smallest positive number
+    end % if
+    if (plot_params(fig_no, max_idx) <= 0) % Hopefully this never happens!
+      plot_params(fig_no, max_idx) = eps; % eps = smallest positive number
+    end % if
+
+    % Change axis limits of c-axis to logs
+    if (axis_char == 'c')
+      plot_params(fig_no, min_idx:max_idx) = log10(plot_params(fig_no, min_idx:max_idx));
+    end % if
+  else
+    if (axis_char == 'c')
+      plot_params(fig_no, min_idx:max_idx) = 10.^(plot_params(fig_no, min_idx:max_idx));
+    end % if
+  end % if
+
+  replot(fig_no);
+
+end % function
+
 function add_breakpoints(src, data)
 
   global fig_handles;
@@ -713,9 +757,18 @@ function m_plot = create_plot_menu(fig_no, parent = 0)
 
   % For FFT plots, allow option of plotting absolute values or power
   if (any(fig_no == [2,4,6])) % 2, 4, 6 are the FFT plots
-    m_plot_abs       = uimenu(m_plot, 'label', 'Absolute value', 'separator', 'on', 'callback', {@set_fft_plot_type, fig_no, nan});
-    m_plot_power     = uimenu(m_plot, 'label', 'Power', 'callback', {@set_fft_plot_type, fig_no, 2});
+    m_plot_abs   = uimenu(m_plot, 'label', 'Amplitudes', 'separator', 'on', 'callback', {@set_fft_plot_type, fig_no, nan});
+    m_plot_power = uimenu(m_plot, 'label', 'Power', 'callback', {@set_fft_plot_type, fig_no, 2});
   end
+
+  % Allow the option to turn on/off log-plotting for select axes depending on the plot type
+  switch fig_no
+    case {2} % FFT plot
+      m_plot_xlog = uimenu(m_plot, 'label', 'Log x-axis', 'separator', 'on', 'callback', {@toggle_log, fig_no, 'x'});
+      m_plot_ylog = uimenu(m_plot, 'label', 'Log y-axis', 'callback', {@toggle_log, fig_no, 'y'});
+    case {4,6} % HRFS and 2DFS plots
+      m_plot_clog = uimenu(m_plot, 'label', 'Log pixel values', 'separator', 'on', 'callback', {@toggle_log, fig_no, 'c'});
+  end % switch
 
 end % function
 
@@ -1017,9 +1070,24 @@ function plot_fft(src, data)
     ylabel_text = 'Power';
   end % if
 
+  % Set plot function according to whether log plots are requested
+  switch [plot_params(fig_no, 9:10)]
+    case [0,0]
+      plot_fcn = @plot;
+    case [1,0]
+      plot_fcn = @semilogx;
+    case [0,1]
+      plot_fcn = @semilogy;
+    case [1,1]
+      plot_fcn = @loglog;
+    otherwise
+      errordlg("Non-logical values for plot log type");
+      return
+  end % switch
+
   % Plot up the FFT
   figure(fig_handles(fig_no));
-  plot(spectrum_freqs, to_be_plotted, 'b');
+  plot_fcn(spectrum_freqs, to_be_plotted, 'b');
   xlabel('Frequency (Hz)');
   ylabel(ylabel_text);
 
@@ -1170,6 +1238,11 @@ function plot_hrfs(src, data)
   xs = [0:(nx-1)]*spectrum_freqs(2)*period;
   ys = [0:(ny-1)];
 
+  % Plot log values, if requested
+  if (plot_params(fig_no, 12))
+    to_be_plotted = log10(to_be_plotted);
+  end % if
+
   % Plot up the FFT
   figure(fig_handles(fig_no));
   imagesc(xs, ys, to_be_plotted);
@@ -1285,6 +1358,11 @@ function plot_tdfs(src, data)
   xs = [0:(nxs-1)];                % Units of v_l * P1/(2*pi)
   %xs = [0:(nxs-1)]/period;        % Units of v_l * 2*pi*P1 ??
   ys = [-yshift:(yshift-1)] / nys;  % Units v_t * P1
+
+  % Plot log values, if requested
+  if (plot_params(fig_no, 12))
+    tdfs = log10(tdfs);
+  end % if
 
   % Draw plot
   imagesc(xs, ys, tdfs);
