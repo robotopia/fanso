@@ -1339,35 +1339,37 @@ function plot_tdfs(src, data)
 
   % Calculate the 2DFS
   reshape_timeseries_into_grid();
-  tdfs = abs(fft2(timeseries_grid));
+  tdfs = fft2(timeseries_grid);
+  to_be_plotted = abs(tdfs);
   clabel_text   = 'Amplitude';
 
   % Are we plotting power instead?
   if (plot_params(fig_no, 16) == 2)
-    tdfs .^= 2;
+    to_be_plotted .^= 2;
     clabel_text = 'Power';
   end % if
 
-  % Chop off the right half (= conjugate of left half for real signal)
-  % and rotate vertically so that DC is in centre of grid
-  nxs = ceil((columns(tdfs)+1)/2);
-  nys = rows(tdfs);
-  tdfs = tdfs(:,1:nxs);
+  % Shift in x and y so that DC is in centre of grid
+  nxs = columns(to_be_plotted);
+  nys = rows(to_be_plotted);
+  xshift = floor(nxs/2);
   yshift = floor(nys/2);
-  tdfs = shift(tdfs, yshift);
+  to_be_plotted = shift(to_be_plotted, xshift, 2);
+  to_be_plotted = shift(to_be_plotted, yshift);
 
-  xs = [0:(nxs-1)];                % Units of v_l * P1/(2*pi)
-  %xs = [0:(nxs-1)]/period;        % Units of v_l * 2*pi*P1 ??
-  ys = [-yshift:(yshift-1)] / nys;  % Units v_t * P1
+  %xs = [-xshift:(xshift-1)];         % Units of v_l * P1/(2*pi)
+  %xs = [-xshift:(xshift-1)]/period;  % Units of v_l * 2*pi*P1 ??
+  xs = [-xshift:(xshift-1)];          % Units of v_l * P1/(2*pi)?
+  ys = [-yshift:(yshift-1)] / nys;    % Units v_t * P1
 
   % Plot log values, if requested
   if (plot_params(fig_no, 12))
-    tdfs = log10(tdfs);
+    to_be_plotted = log10(to_be_plotted);
     clabel_text = ['log_{10} (', clabel_text, ')'];
   end % if
 
   % Draw plot
-  imagesc(xs, ys, tdfs);
+  imagesc(xs, ys, to_be_plotted);
   axis("xy");
 
   % Draw colorbar
