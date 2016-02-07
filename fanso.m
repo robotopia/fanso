@@ -1294,8 +1294,10 @@ function plot_waterfall(src, data)
 
   global period
   global timeseries_grid
+  global plot_params
 
   global waterfall_plot_type
+  global only_visible
 
   % Make sure the period has been set
   if (isempty(period))
@@ -1313,7 +1315,7 @@ function plot_waterfall(src, data)
 
   figure(fig_handles(fig_no));
 
-  reshape_timeseries_into_grid();
+  reshape_timeseries_into_grid(false); % <-- false = do whole timeseries, not just visible part
 
   % Get appropriate values for x and y axes
   nxs = columns(timeseries_grid);
@@ -1327,6 +1329,18 @@ function plot_waterfall(src, data)
       imagesc(xs, ys, timeseries_grid);
       apply_colormap(fig_no);
       axis("xy");
+
+      if (only_visible)
+        ymin = max([plot_params(1,1)/period,0.5]);
+        ymax = min([plot_params(1,2)/period,nys+0.5]);
+        hold on;
+        X = [-0.5,nxs-0.5];
+        Y1 = [ymin, ymin];
+        Y2 = [ymax, ymax];
+        plot(X,Y1,'g',X,Y2,'g');
+        hold off;
+      end % if
+
       colorbar();
 
     case 1 % 3D
@@ -1438,7 +1452,7 @@ function plot_tdfs(src, data)
 
 end % function
 
-function reshape_timeseries_into_grid()
+function reshape_timeseries_into_grid(do_visible = true)
 
   global timeseries
   global flattened
@@ -1459,7 +1473,7 @@ function reshape_timeseries_into_grid()
   end % if
 
   % Are we processing just the visible part?
-  if (only_visible)
+  if (only_visible && do_visible)
     xax = plot_params(1,1:2);
     min_idx = max([floor(xax(1)/dt)+1, 1]);
     max_idx = min([floor(xax(2)/dt)+1, length(timeseries)]); % <-- Check this
