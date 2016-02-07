@@ -75,6 +75,7 @@ function init_plot_variables()
   global apply_hamming  % 0 = Do nothing;               1 = Apply Hamming window
   global apply_hanning  % 0 = Do nothing;               1 = Apply Hanning window
   global apply_bps      % 0 = Do nothing;               1 = Apply breakpoints (i.e. "flatten" timeseries)
+  global show_peaks     % 0 = Do nothing;               1 = Plot positions of local maxima in 2DFS
 
   % A global variable for the breakpoints
   global breakpoints
@@ -117,6 +118,7 @@ function init_plot_variables()
   apply_hamming = 0;
   apply_hanning = 0;
   apply_bps     = 0;
+  show_peaks    = 0;
 
   breakpoints = [];
 
@@ -165,6 +167,7 @@ function save_data(filepathname)
   global apply_hamming
   global apply_hanning
   global apply_bps
+  global show_peaks
   global breakpoints
   global nprofile_bins
   global period
@@ -182,6 +185,7 @@ function save_data(filepathname)
         "apply_hamming", ...
         "apply_hanning", ...
         "apply_bps", ...
+        "show_peaks", ...
         "breakpoints", ...
         "nprofile_bins", ...
         "period", ...
@@ -263,6 +267,7 @@ function load_fan(src, data)
   global apply_hamming
   global apply_hanning
   global apply_bps
+  global show_peaks
   global breakpoints
   global nprofile_bins
   global period
@@ -467,9 +472,8 @@ function toggle_visible(src, data)
   set(src, 'checked', on_off(only_visible));
 
   % Redraw plots
-  fig_nos = [2,4,5];
-  get_axes(0,0,fig_nos);
-  replot(fig_nos);
+  get_axes();
+  replot();
 
 end % function
 
@@ -528,6 +532,21 @@ function toggle_log(src, data, fig_no, axis_char)
   end % if
 
   replot(fig_no);
+
+end % function
+
+function toggle_peaks(src, data)
+
+  global show_peaks
+  show_peaks = ~show_peaks;
+
+  set_unsaved_changes(true);
+
+  set(src, 'checked', on_off(show_peaks));
+
+  % Redraw plots
+  get_axes(0,0,6);
+  replot(6);
 
 end % function
 
@@ -735,6 +754,8 @@ function create_figure(src, data, fig_no)
 
       create_plot_menu(fig_no);
       create_colormap_menu(fig_no);
+      m_tdfs_analyse         = uimenu('label', 'Analyse');
+      m_tdfs_analyse_peaks   = uimenu(m_tdfs_analyse, 'label', 'Show peaks', 'callback', @toggle_peaks);
 
   end % switch
 
@@ -753,7 +774,7 @@ function m_plot = create_plot_menu(fig_no, parent = 0)
   end % if
 
   % Children menu items
-  m_plot_save = uimenu(m_plot, 'label', 'Remember plot view', 'callback', {@get_axes, fig_no});
+  m_plot_save = uimenu(m_plot, 'label', 'Redraw all plots', 'accelerator', '1', 'callback', {@update_plots, fig_no});
 
   % For FFT plots, allow option of plotting absolute values or power
   if (any(fig_no == [2,4,6])) % 2, 4, 6 are the FFT plots
@@ -801,6 +822,13 @@ function m_colormap = create_colormap_menu(fig_no)
                      'callback', {@scale_caxis, fig_no,  0.1, 0});
   uimenu(m_colormap, 'label', 'Decrease Min by 10% of range', 'accelerator', '-', ...
                      'callback', {@scale_caxis, fig_no, -0.1, 0});
+
+end % function
+
+function update_plots(src, data)
+
+  get_axes();
+  replot();
 
 end % function
 
@@ -1326,6 +1354,7 @@ function plot_tdfs(src, data)
 
   global timeseries_grid
   global period
+  global show_peaks
 
   % Switch to/Create HRFS figure and keep track of the view window
   fig_no = 6;
@@ -1350,17 +1379,16 @@ function plot_tdfs(src, data)
   end % if
 
   % Shift in x and y so that DC is in centre of grid
-  nxs = columns(to_be_plotted);
-  nys = rows(to_be_plotted);
-  xshift = floor(nxs/2);
-  yshift = floor(nys/2);
+  nxs = columns(to_be_plotted);  nys = rows(to_be_plotted);
+  xmin = -floor((nxs-1)/2);      xmax = ceil((nxs-1)/2);
+  ymin = -floor((nys-1)/2);      ymax = ceil((nys-1)/2);
+  xshift = -xmin;                yshift = -ymin;
+
   to_be_plotted = shift(to_be_plotted, xshift, 2);
   to_be_plotted = shift(to_be_plotted, yshift);
 
-  %xs = [-xshift:(xshift-1)];         % Units of v_l * P1/(2*pi)
-  %xs = [-xshift:(xshift-1)]/period;  % Units of v_l * 2*pi*P1 ??
-  xs = [-xshift:(xshift-1)];          % Units of v_l * P1/(2*pi)?
-  ys = [-yshift:(yshift-1)] / nys;    % Units v_t * P1
+  xs = [xmin:xmax];          % Units of v_l * P1/(2*pi)?
+  ys = [ymin:ymax] / nys;    % Units v_t * P1
 
   % Plot log values, if requested
   if (plot_params(fig_no, 12))
@@ -1371,6 +1399,29 @@ function plot_tdfs(src, data)
   % Draw plot
   imagesc(xs, ys, to_be_plotted);
   axis("xy");
+
+  if (show_peaks)
+    % Calculate local maxima positions
+    m1 = to_be_plotted >= shift(to_be_plotted,  1, 1); % Pixel is >= the one below it
+    m2 = to_be_plotted >= shift(to_be_plotted, -1, 1); % Pixel is >= the one above it
+    m3 = to_be_plotted >= shift(to_be_plotted,  1, 2); % Pixel is >= the one to the right of it
+    m4 = to_be_plotted >= shift(to_be_plotted, -1, 2); % Pixel is >= the one to the left of it
+
+    % Apply threshold so that we don't get every single peak in the noise
+    threshold = 0.10; % i.e. 10% between min and max
+    minval    = min(min(to_be_plotted));
+    maxval    = max(max(to_be_plotted));
+    threshold = threshold*(maxval - minval) - minval; % Convert from percentage to absolute value
+    is_above_threshold = to_be_plotted > threshold;
+
+    [my, mx] = find(m1 & m2 & m3 & m4 & is_above_threshold);
+
+    % Draw local maxima positions
+    hold on;
+    plot(xs(mx), ys(my), 'gx');
+    hold off;
+  end % if
+
 
   % Draw colorbar
   colorbar('ylabel', clabel_text);
@@ -1392,10 +1443,12 @@ function reshape_timeseries_into_grid()
   global timeseries
   global flattened
   global timeseries_grid
+  global plot_params
 
   global period % Assumed to have been set by this point
   global dt
 
+  global only_visible
   global apply_bps
 
   % Get the appropriate timeseries
@@ -1403,6 +1456,14 @@ function reshape_timeseries_into_grid()
     to_be_plotted = flattened;
   else
     to_be_plotted = timeseries;
+  end % if
+
+  % Are we processing just the visible part?
+  if (only_visible)
+    xax = plot_params(1,1:2);
+    min_idx = max([floor(xax(1)/dt)+1, 1]);
+    max_idx = min([floor(xax(2)/dt)+1, length(timeseries)]); % <-- Check this
+    to_be_plotted = to_be_plotted([min_idx:max_idx]);
   end % if
 
   % Prepare the grid of values
@@ -1489,6 +1550,7 @@ function calc_fft()
   global flattened
   global dt
   global period
+  global plot_params
 
   global spectrum_freqs
   global spectrum_vals
@@ -1509,10 +1571,9 @@ function calc_fft()
 
   % Are we processing just the visible part?
   if (only_visible)
-    figure(fig_handles(1));
-    ax1 = axis();
-    min_idx = max([floor(ax1(1)/dt)+1, 1]);
-    max_idx = min([floor(ax1(2)/dt)+1, length(timeseries)]); % <-- Check this
+    xax = plot_params(1,1:2);
+    min_idx = max([floor(xax(1)/dt)+1, 1]);
+    max_idx = min([floor(xax(2)/dt)+1, length(timeseries)]); % <-- Check this
     to_be_ffted = to_be_ffted([min_idx:max_idx]);
   end % if
 
@@ -1709,6 +1770,8 @@ function flatten()
 
   if (isempty(breakpoints))
     flattened = timeseries;
+  else
+    flattened = zeros(size(timeseries));
   end % if
 
   % Book-end the breakpoints with initial and final values
