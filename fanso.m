@@ -1241,6 +1241,7 @@ function plot_hrfs(src, data)
   % Plot log values, if requested
   if (plot_params(fig_no, 12))
     to_be_plotted = log10(to_be_plotted);
+    clabel_text = ['log_{10} (', clabel_text, ')'];
   end % if
 
   % Plot up the FFT
@@ -1362,6 +1363,7 @@ function plot_tdfs(src, data)
   % Plot log values, if requested
   if (plot_params(fig_no, 12))
     tdfs = log10(tdfs);
+    clabel_text = ['log_{10} (', clabel_text, ')'];
   end % if
 
   % Draw plot
