@@ -88,6 +88,10 @@ function init_plot_variables()
   % Plot viewing parameters
   global fig_functions
   global plot_params
+
+  % When using mouse to click on images, snap to nearest pixel centre?
+  global quantise
+
   plot_params = nan(length(fig_functions), 18);
     % 12 plot parameters to be stored here are:
     %    xmin, xmax, ymin, ymax, zmin, zmax, cmin, cmax,  % <-- real numbers
@@ -127,6 +131,8 @@ function init_plot_variables()
   breakpoints = [];
 
   filename = [];
+
+  quantise = 1;
 
   set_unsaved_changes(false);
 
@@ -767,6 +773,12 @@ function create_figure(src, data, fig_no)
       m_tdfs_analyse         = uimenu('label', 'Analyse');
       m_tdfs_analyse_peaks   = uimenu(m_tdfs_analyse, 'label', 'Show peaks', 'callback', @toggle_peaks);
       m_tdfs_analyse_p2p3    = uimenu(m_tdfs_analyse, 'label', 'Choose P2, P3', 'callback', {@click_p2p3, fig_no});
+      m_tdfs_analyse_hfilt   = uimenu(m_tdfs_analyse, 'label', 'Create horizontal filter', 'separator', 'on', ...
+                                      'callback', {@create_filter, fig_no, "horizontal"});
+      m_tdfs_analyse_vfilt   = uimenu(m_tdfs_analyse, 'label', 'Create vertical filter', ...
+                                      'callback', {@create_filter, fig_no, "vertical"});
+      m_tdfs_analyse_delfilt = uimenu(m_tdfs_analyse, 'label', 'Delete filter', 'separator', 'on', ...
+                                      'callback', {@delete_filter, fig_no});
 
   end % switch
 
@@ -1378,12 +1390,17 @@ function plot_tdfs(src, data)
   global plot_params
 
   global timeseries_grid
+  global tdfs
+
   global period
   global P2hat
   global P3hat
   global show_peaks
+  global filters
+  global new_filter
+  global shift_DC
 
-  % Switch to/Create HRFS figure and keep track of the view window
+  % Switch to/Create 2DFS figure and keep track of the view window
   fig_no = 6;
   first_time = (fig_handles(fig_no) == 0);
 
@@ -1396,6 +1413,10 @@ function plot_tdfs(src, data)
   % Calculate the 2DFS
   reshape_timeseries_into_grid();
   tdfs = fft2(timeseries_grid);
+
+  apply_tdfs_filters();
+  apply_shift_DC();
+
   to_be_plotted = abs(tdfs);
   clabel_text   = 'Amplitude';
 
@@ -1459,6 +1480,37 @@ function plot_tdfs(src, data)
     hold off;
   end % if
 
+  % Show filter boundaries
+  if (~isempty(filters))
+    hold on;
+    for n = 1:rows(filters)
+      switch filters(n,3)
+        case 0 % Horizontal filter
+          Xouter = [xmin, xmin;
+                    xmax, xmax];
+          Xinner = Xouter;
+          Youter = [filters(n,1)+filters(n,2), filters(n,1)-filters(n,2);
+                    filters(n,1)+filters(n,2), filters(n,1)-filters(n,2)];
+          Yinner = [filters(n,1)+filters(n,2)/2, filters(n,1)-filters(n,2)/2;
+                    filters(n,1)+filters(n,2)/2, filters(n,1)-filters(n,2)/2];
+        case 1 % Vertical filter
+          Xouter = [filters(n,1)+filters(n,2), filters(n,1)-filters(n,2);
+                    filters(n,1)+filters(n,2), filters(n,1)-filters(n,2)];
+          Xinner = [filters(n,1)+filters(n,2)/2, filters(n,1)-filters(n,2)/2;
+                    filters(n,1)+filters(n,2)/2, filters(n,1)-filters(n,2)/2];
+          Youter = [ymin, ymin;
+                    ymax, ymax];
+          Yinner = Youter;
+      end % switch
+      if (filters(n,4) == 0) % filter is not marked for deletion
+        plot(Xouter, Youter, 'g--', Xinner, Yinner, 'g');
+      else % filter is marked for deletion
+        plot(Xouter, Youter, 'r--', Xinner, Yinner, 'r');
+      end % if
+    end % for
+    hold off;
+  end % if
+
   % Draw colorbar
   colorbar('ylabel', clabel_text);
   apply_colormap(fig_no);
@@ -1471,6 +1523,55 @@ function plot_tdfs(src, data)
   if (~set_axes(fig_no))
     get_axes(0,0,fig_no);
   end % if
+
+end % function
+
+function apply_shift_DC()
+
+  global shift_DC
+
+  if (~isempty(shift_DC))
+    % YET-TO-DO ...
+  end % if
+
+end % function
+
+function apply_tdfs_filters()
+
+  global tdfs
+  global filters
+
+  % Get the x and y values
+  nxs = columns(tdfs);           nys = rows(tdfs);
+  xmin = -floor((nxs-1)/2);      xmax = ceil((nxs-1)/2);
+  ymin = -floor((nys-1)/2);      ymax = ceil((nys-1)/2);
+  xshift = -xmin;                yshift = -ymin;
+
+  % Shift so that DC is in the centre
+  tdfs = shift(tdfs, xshift, 2);
+  tdfs = shift(tdfs, yshift);
+
+  xs = [xmin:xmax];          % Units of   v_l*P1/(2*pi)   or   v_l*P1?
+  ys = [ymin:ymax] / nys;    % Units v_t * P1
+
+  [X, Y] = meshgrid(xs, ys);
+
+  nfilters = rows(filters);
+  for n = 1:nfilters
+    switch filters(n,3)
+      case 0 % horizontal filter
+        transmission = 2*abs(Y - filters(n,1))/filters(n,2) - 1;
+      case 1 % vertical filter
+        transmission = 2*abs(X - filters(n,1))/filters(n,2) - 1;
+    end % switch
+    transmission(transmission > 1) = 1;
+    transmission(transmission < 0) = 0;
+    tdfs .*= transmission;
+  end % for
+
+  % Shift back so that DC is at (1,1)
+  tdfs = shift(tdfs, -xshift, 2);
+  tdfs = shift(tdfs, -yshift);
 
 end % function
 
@@ -2077,43 +2178,238 @@ end % function
 function click_p2p3(src, data, fig_no)
 
   global fig_handles
+  global quantise
+
   global orig_windowbuttondownfcn_p2p3
+  global orig keypressfcn_p2p3
 
   h = fig_handles(fig_no);
-  orig_windowbuttondownfcn_p2p3 = get(h, "windowbuttondownfcn");
-  set(h, "windowbuttondownfcn", @collect_p2p3_click);
 
-  title("Choose P2 and P3 (hat) by clicking on the 2DFS");
+  orig_windowbuttondownfcn_p2p3 = get(h, "windowbuttondownfcn");
+  orig_keypressfcn_p2p3         = get(h, "keypressfcn");
+
+  title_stem = ["Choose P2 and P3 (hat) by clicking on the 2DFS\nPress 'q' to turn quantisation"];
+  title([title_stem, " ", on_off(~quantise)]);
+
+  set(h, "windowbuttondownfcn", @collect_p2p3_click);
+  set(h, "keypressfcn", {@collect_quantise_keypress, title_stem});
 
 end % function
 
 function collect_p2p3_click(src, button)
 
-  global orig_windowbuttondownfcn_p2p3
   global period
   global P2hat
   global P3hat
   global timeseries_grid
 
+  global orig_windowbuttondownfcn_p2p3
+  global orig_keypressfcn_p2p3
+
+  global quantise
+
   if (button == 1) % Left mouse click
 
     % Get the clicked point
-    point = get(gca(), "currentpoint");
+    pos = get_curr_pos(gca(), quantise);
 
     % Calculate P2 and P3 hat (remember to round for pixels)
-    dx = 1; % For 2DFS, dx should always be "1"
-    dy = 1/rows(timeseries_grid);
-    rounded_x = round(point(1,1)/dx) * dx;
-    rounded_y = round(point(1,2)/dy) * dy;
-    P2hat = period/rounded_x;
-    P3hat = period/rounded_y;
+    P2hat = period/pos(1);
+    P3hat = period/pos(2);
     title("");
     set(gcf(), "windowbuttondownfcn", orig_windowbuttondownfcn_p2p3);
+    set(gcf(), "keypressfcn", orig_keypressfcn_p2p3);
 
   end % if
 
   set_unsaved_changes(true);
   get_axes(0,0,6);
   replot(6);
+
+end % function
+
+function create_filter(src, data, fig_no, hor_or_vert)
+% hor_or_vert should be "horizontal" or "vertical"
+
+  global fig_handles
+  global new_filter
+  global quantise
+
+  global orig_windowbuttondownfcn_filter
+  global orig_windowbuttonmotionfcn_filter
+  global orig keypressfcn_filter
+
+  hv = find(strcmp(hor_or_vert, {"horizontal", "vertical"})) - 1; % "h..." --> 0;  "v..." --> 1
+  new_filter = [0, 0, hv, 0]; % [coord, width, hor_or_vel, marked_for_deletion]
+  h = fig_handles(fig_no);
+
+  orig_windowbuttondownfcn_filter   = get(h, "windowbuttondownfcn");
+  orig_windowbuttonmotionfcn_filter = get(h, "windowbuttonmotionfcn");
+  orig_keypressfcn_filter           = get(h, "keypressfcn");
+
+  title_stem = ["Click the centre of the ", hor_or_vert, " filter\nPress 'q' to turn quantisation"];
+  title([title_stem, " ", on_off(~quantise)]);
+
+  set(h, "windowbuttondownfcn", {@collect_filter_click, 1, hor_or_vert}); % "1" = First click
+  set(h, "windowbuttonmotionfcn", []); % <-- YET-TO-IMPLEMENT
+  set(h, "keypressfcn", {@collect_quantise_keypress, title_stem});
+
+  get_axes(0,0,fig_no);
+
+end % function
+
+function collect_filter_click(src, button, click_no, hor_or_vert)
+
+  global quantise
+  global new_filter
+  global filters
+
+  global orig_windowbuttondownfcn_filter
+  global orig_windowbuttonmotionfcn_filter
+  global orig_keypressfcn_filter
+
+  % Get the last clicked position
+  pos = get_curr_pos(gca, quantise);
+  idx = 2 - new_filter(3); % "h..." --> 2;  "v..." --> 1
+
+  switch click_no
+    case 1
+      % Include the clicked value in the new filter
+      new_filter(1) = pos(idx);
+
+      % Change figure title
+      title_stem = ["Click the edge of the ", hor_or_vert, " filter\nPress 'q' to turn quantisation"];
+      title([title_stem, " ", on_off(~quantise)]);
+
+      % Change callback functions on mouse click and key-press
+      set(src, "windowbuttondownfcn", {@collect_filter_click, 2, hor_or_vert});
+      set(src, "keypressfcn", {@collect_quantise_keypress, title_stem});
+    case 2
+      % Include the clicked value in the new filter and annex the new filter onto the list of filters
+      new_filter(2) = abs(pos(idx) - new_filter(1));
+      if (new_filter(2) > 0)
+        no_filters = rows(filters);
+        filters((no_filters+1),:) = new_filter;
+      else
+        errordlg("Cannot create filter of zero width");
+      end % if
+
+      % Reset new_filter to empty (so that nothing extraneous is plotted in plot_tdfs)
+      new_filter = [];
+
+      % Set things back to the way they were
+      set(src, "windowbuttondownfcn", orig_windowbuttondownfcn_filter);
+      set(src, "windowbuttonmotionfcn", orig_windowbuttonmotionfcn_filter);
+      set(src, "keypressfcn", orig_keypressfcn_filter);
+
+      title("");
+  end % switch
+
+  replot(6);
+
+end % function
+
+function collect_quantise_keypress(src, evt, newtitle_stem)
+
+  if (evt.Character == 'q')
+
+    global quantise
+    quantise = ~quantise;
+
+    title([newtitle_stem, " ", on_off(~quantise)]);
+
+  end
+
+end % function
+
+function pos = get_curr_pos(hax, quantised)
+
+  point = get(hax, "currentpoint");
+
+  if (quantised)
+    global timeseries_grid
+    dx = 1;                               % Size of a pixel in the x-direction (in the 2DFS)
+    dy = 1/rows(timeseries_grid);         % Size of a pixel in the y-direction (in the 2DFS)
+    pos = [round(point(1,1)/dx) * dx, round(point(1,2)/dy) * dy];
+  else
+    pos = [point(1,1), point(1,2)];
+  end % if
+
+end % function
+
+function delete_filter(src, data, fig_no)
+
+  global fig_handles
+  global orig_windowbuttondownfcn_delfilter
+  global orig_keypressfcn_delfilter
+  global filters
+
+  % "Save" the old
+  h = fig_handles(fig_no);
+  orig_windowbuttondownfcn_delfilter = get(h, "windowbuttondownfcn");
+
+  set(h, "windowbuttondownfcn", @collect_deletefilter_click);
+  set(h, "keypressfcn", @keypress_deletefilter);
+
+  title("Left click = select/deselect\nRight click = cancel\n'd' = delete")
+
+  get_axes(0,0,fig_no);
+
+end % function
+
+function collect_deletefilter_click(src, button)
+
+  global filters
+  global orig_windowbuttondownfcn_delfilter
+  global orig_keypressfcn_delfilter
+
+  switch button
+    case 1 % Left click = mark for deletion
+      % Get current position of cursor
+      pos = get_curr_pos(gca, false);
+
+      % Select filters containing cursor
+      h_distances = (filters(:,3) == 0) .* (abs(pos(2) - filters(:,1)) ./ filters(:,2)); % horizontal filters
+      v_distances = (filters(:,3) == 1) .* (abs(pos(1) - filters(:,1)) ./ filters(:,2)); % vertical filters
+      distances = h_distances + v_distances;
+      [mindist, closest] = min(distances);
+
+      if (mindist <= 1)
+        filters(closest,4) = ~filters(closest,4);
+        replot(6);
+        title("Left click = select/deselect\nRight click = cancel\n'd' = delete")
+      end % if
+
+    case 3 % Right click = cancel
+      filters(:,4) = 0;
+      if (isempty(filters))
+        clear filters
+      end % if
+
+      set(src, "windowbuttondownfcn", orig_windowbuttondownfcn_delfilter);
+      set(src, "keypressfcn", orig_keypressfcn_delfilter);
+      title("");
+      replot(6);
+  end % switch
+
+end % function
+
+function keypress_deletefilter(src, evt)
+
+  global filters
+  global orig_windowbuttondownfcn_delfilter
+  global orig_keypressfcn_delfilter
+
+  if (evt.Character == 'd')
+    filters = filters(~filters(:,4),:);
+
+    if (isempty(filters))
+      clear filters
+    end % if
+
+    set(src, "windowbuttondownfcn", orig_windowbuttondownfcn_delfilter);
+    set(src, "keypressfcn", orig_keypressfcn_delfilter);
+    replot(6);
+  end % if
 
 end % function
