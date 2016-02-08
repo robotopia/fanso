@@ -62,6 +62,8 @@ function init_plot_variables()
   global fft_plot_type       % 0 = amplitudes;  1 = power
   global waterfall_plot_type % 0 = 2D color;  1 = 3D heights
   global period              % The folding period (P1)
+  global P2hat               % The measured longitudinal "time" between subpulses, P2
+  global P3hat               % The measured "time" between subpulses at the same phase, P3
   global nprofile_bins       % The number of bins to be used for folding output
 
   % Variables for the size and position of the figure windows
@@ -107,6 +109,8 @@ function init_plot_variables()
   fft_plot_type       = 0;
   waterfall_plot_type = 0;
   clear period
+  clear P2hat
+  clear P3hat
   clear nprofile_bins
 
   screensize = get(0, 'screensize');
@@ -171,6 +175,8 @@ function save_data(filepathname)
   global breakpoints
   global nprofile_bins
   global period
+  global P2hat
+  global P3hat
   global plot_params
 
   % Save all the info!
@@ -189,6 +195,8 @@ function save_data(filepathname)
         "breakpoints", ...
         "nprofile_bins", ...
         "period", ...
+        "P2hat", ...
+        "P3hat", ...
         "plot_params");
 
   set_unsaved_changes(false);
@@ -271,6 +279,8 @@ function load_fan(src, data)
   global breakpoints
   global nprofile_bins
   global period
+  global P2hat
+  global P3hat
   global plot_params
 
   global filename
@@ -756,6 +766,7 @@ function create_figure(src, data, fig_no)
       create_colormap_menu(fig_no);
       m_tdfs_analyse         = uimenu('label', 'Analyse');
       m_tdfs_analyse_peaks   = uimenu(m_tdfs_analyse, 'label', 'Show peaks', 'callback', @toggle_peaks);
+      m_tdfs_analyse_p2p3    = uimenu(m_tdfs_analyse, 'label', 'Choose P2, P3', 'callback', {@click_p2p3, fig_no});
 
   end % switch
 
@@ -1368,6 +1379,8 @@ function plot_tdfs(src, data)
 
   global timeseries_grid
   global period
+  global P2hat
+  global P3hat
   global show_peaks
 
   % Switch to/Create HRFS figure and keep track of the view window
@@ -1401,7 +1414,7 @@ function plot_tdfs(src, data)
   to_be_plotted = shift(to_be_plotted, xshift, 2);
   to_be_plotted = shift(to_be_plotted, yshift);
 
-  xs = [xmin:xmax];          % Units of v_l * P1/(2*pi)?
+  xs = [xmin:xmax];          % Units of   v_l*P1/(2*pi)   or   v_l*P1?
   ys = [ymin:ymax] / nys;    % Units v_t * P1
 
   % Plot log values, if requested
@@ -1414,6 +1427,7 @@ function plot_tdfs(src, data)
   imagesc(xs, ys, to_be_plotted);
   axis("xy");
 
+  % Show local maxima
   if (show_peaks)
     % Calculate local maxima positions
     m1 = to_be_plotted >= shift(to_be_plotted,  1, 1); % Pixel is >= the one below it
@@ -1436,6 +1450,14 @@ function plot_tdfs(src, data)
     hold off;
   end % if
 
+  % Show position of P2 & P3 hat
+  if (~isempty(P2hat) && ~isempty(P3hat))
+    hold on;
+    X = [period/P2hat; -period/P2hat];
+    Y = [period/P3hat; -period/P3hat];
+    plot(X, Y, 'go', "markersize", 10);
+    hold off;
+  end % if
 
   % Draw colorbar
   colorbar('ylabel', clabel_text);
@@ -2049,5 +2071,49 @@ function set_colormap_type(src, data, fig_no, newtype)
 
   get_axes();
   replot(fig_no);
+
+end % function
+
+function click_p2p3(src, data, fig_no)
+
+  global fig_handles
+  global orig_windowbuttondownfcn_p2p3
+
+  h = fig_handles(fig_no);
+  orig_windowbuttondownfcn_p2p3 = get(h, "windowbuttondownfcn");
+  set(h, "windowbuttondownfcn", @collect_p2p3_click);
+
+  title("Choose P2 and P3 (hat) by clicking on the 2DFS");
+
+end % function
+
+function collect_p2p3_click(src, button)
+
+  global orig_windowbuttondownfcn_p2p3
+  global period
+  global P2hat
+  global P3hat
+  global timeseries_grid
+
+  if (button == 1) % Left mouse click
+
+    % Get the clicked point
+    point = get(gca(), "currentpoint");
+
+    % Calculate P2 and P3 hat (remember to round for pixels)
+    dx = 1; % For 2DFS, dx should always be "1"
+    dy = 1/rows(timeseries_grid);
+    rounded_x = round(point(1,1)/dx) * dx;
+    rounded_y = round(point(1,2)/dy) * dy;
+    P2hat = period/rounded_x;
+    P3hat = period/rounded_y;
+    title("");
+    set(gcf(), "windowbuttondownfcn", orig_windowbuttondownfcn_p2p3);
+
+  end % if
+
+  set_unsaved_changes(true);
+  get_axes(0,0,6);
+  replot(6);
 
 end % function
