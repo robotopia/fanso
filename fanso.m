@@ -11,7 +11,7 @@ function fanso()
   if (isempty(FANSO_INSTANCE)) % i.e. there is NO instance already open
     FANSO_INSTANCE = 1;
   else
-    % Simply switch to the main figure
+    % Exit gracefully
     disp('FANSO already running');
     return
   end
@@ -1438,7 +1438,7 @@ function plot_tdfs(src, data)
     clabel_text = 'Power';
   end % if
 
-  % Shift in x and y so that DC is in centre of grid
+  % Shift in x and y so that (shifted) DC is in centre of grid (as opposed to position (1,1)
   nxs = columns(to_be_plotted);  nys = rows(to_be_plotted);
   xmin = -floor((nxs-1)/2);      xmax = ceil((nxs-1)/2);
   ymin = -floor((nys-1)/2);      ymax = ceil((nys-1)/2);
@@ -1483,14 +1483,14 @@ function plot_tdfs(src, data)
     hold off;
   end % if
 
-  % Show position of P2 & P3 hat
-  if (~isempty(P2hat) && ~isempty(P3hat))
-    hold on;
-    X = [period/P2hat; -period/P2hat];
-    Y = [period/P3hat; -period/P3hat];
-    plot(X, Y, 'go', "markersize", 10);
-    hold off;
-  end % if
+%  % Show position of P2 & P3 hat
+%  if (~isempty(P2hat) && ~isempty(P3hat))
+%    hold on;
+%    X = [period/P2hat; -period/P2hat];
+%    Y = [period/P3hat; -period/P3hat];
+%    plot(X, Y, 'go', "markersize", 10);
+%    hold off;
+%  end % if
 
   % Show filter boundaries
   if (~isempty(filters))
@@ -1502,14 +1502,14 @@ function plot_tdfs(src, data)
                     xmax, xmax];
           Xinner = Xouter;
           Youter = [filters(n,1)+filters(n,2), filters(n,1)-filters(n,2);
-                    filters(n,1)+filters(n,2), filters(n,1)-filters(n,2)];
+                    filters(n,1)+filters(n,2), filters(n,1)-filters(n,2)] + shift_DC(2);
           Yinner = [filters(n,1)+filters(n,2)/2, filters(n,1)-filters(n,2)/2;
-                    filters(n,1)+filters(n,2)/2, filters(n,1)-filters(n,2)/2];
+                    filters(n,1)+filters(n,2)/2, filters(n,1)-filters(n,2)/2] + shift_DC(2);
         case 1 % Vertical filter
           Xouter = [filters(n,1)+filters(n,2), filters(n,1)-filters(n,2);
-                    filters(n,1)+filters(n,2), filters(n,1)-filters(n,2)];
+                    filters(n,1)+filters(n,2), filters(n,1)-filters(n,2)] + shift_DC(1);
           Xinner = [filters(n,1)+filters(n,2)/2, filters(n,1)-filters(n,2)/2;
-                    filters(n,1)+filters(n,2)/2, filters(n,1)-filters(n,2)/2];
+                    filters(n,1)+filters(n,2)/2, filters(n,1)-filters(n,2)/2] + shift_DC(1);
           Youter = [ymin, ymin;
                     ymax, ymax];
           Yinner = Youter;
@@ -1534,6 +1534,11 @@ function plot_tdfs(src, data)
   % Get/Set axis limits
   if (~set_axes(fig_no))
     get_axes(0,0,fig_no);
+  end % if
+
+  if (isempty(get(get(gca, "title"), "string")) && ~isempty(P2hat) && ~isempty(P3hat))
+    title_string = sprintf('P2 = P1/%f\nP3 = P1*%f', period/P2hat, P3hat/period);
+    title(title_string);
   end % if
 
 end % function
@@ -2319,6 +2324,7 @@ function collect_filter_click(src, button, click_no, hor_or_vert)
       if (new_filter(2) > 0)
         no_filters = rows(filters);
         filters((no_filters+1),:) = new_filter;
+        set_unsaved_changes(true);
       else
         errordlg("Cannot create filter of zero width");
       end % if
@@ -2402,13 +2408,14 @@ end % function
 function collect_deletefilter_click(src, button)
 
   global filters
+  global shift_DC
   global orig_windowbuttondownfcn_delfilter
   global orig_keypressfcn_delfilter
 
   switch button
     case 1 % Left click = mark for deletion
-      % Get current position of cursor
-      pos = get_curr_pos(gca, false);
+      % Get current position of cursor and adjust by shift_DC amount
+      pos = get_curr_pos(gca, false) - shift_DC;
 
       % Select filters containing cursor
       h_distances = (filters(:,3) == 0) .* (abs(pos(2) - filters(:,1)) ./ filters(:,2)); % horizontal filters
@@ -2443,7 +2450,11 @@ function keypress_deletefilter(src, evt)
   global orig_keypressfcn_delfilter
 
   if (evt.Character == 'd')
-    filters = filters(~filters(:,4),:);
+    to_be_deleted = filters(:,4);
+    if (any(to_be_deleted))
+      set_unsaved_changes(true);
+      filters = filters(~filters(:,4),:);
+    end % if
 
     if (isempty(filters))
       clear filters
@@ -2522,8 +2533,11 @@ function buttonup_shiftDC(src, button)
   global orig_windowbuttonupfcn_shiftDC
 
   % Update shift_DC and reset pos_relative
-  shift_DC        += pos_relative;
-  pos_relative(:)  = 0;
+  if (any(pos_relative ~= 0))
+    set_unsaved_changes(true);
+    shift_DC        += pos_relative;
+    pos_relative(:)  = 0;
+  end % if
 
   set(src, "windowbuttonmotionfcn", orig_windowbuttonmotionfcn_shiftDC);
   set(src, "windowbuttonupfcn",     orig_windowbuttonupfcn_shiftDC);
