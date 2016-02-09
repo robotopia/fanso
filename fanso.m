@@ -89,8 +89,9 @@ function init_plot_variables()
   global fig_functions
   global plot_params
 
-  % When using mouse to click on images, snap to nearest pixel centre?
-  global quantise
+  global quantise      % When using mouse to click on images, snap to nearest pixel centre?
+  global filters       % Horizontal and vertical filters (E&S 2002 - style) used on the 2DFS
+  global shift_DC      % Horizontal and vertical displacement of the origin in the 2DFS
 
   plot_params = nan(length(fig_functions), 18);
     % 12 plot parameters to be stored here are:
@@ -133,6 +134,8 @@ function init_plot_variables()
   filename = [];
 
   quantise = 1;
+  clear filters
+  shift_DC = [0,0];
 
   set_unsaved_changes(false);
 
@@ -184,6 +187,8 @@ function save_data(filepathname)
   global P2hat
   global P3hat
   global plot_params
+  global filters
+  global shift_DC
 
   % Save all the info!
   save("-binary", ...
@@ -203,7 +208,9 @@ function save_data(filepathname)
         "period", ...
         "P2hat", ...
         "P3hat", ...
-        "plot_params");
+        "plot_params", ...
+        "shift_DC", ...
+        "filters");
 
   set_unsaved_changes(false);
 
@@ -288,6 +295,8 @@ function load_fan(src, data)
   global P2hat
   global P3hat
   global plot_params
+  global filters
+  global shift_DC
 
   global filename
   global filepath
@@ -779,6 +788,9 @@ function create_figure(src, data, fig_no)
                                       'callback', {@create_filter, fig_no, "vertical"});
       m_tdfs_analyse_delfilt = uimenu(m_tdfs_analyse, 'label', 'Delete filter', 'separator', 'on', ...
                                       'callback', {@delete_filter, fig_no});
+      m_tdfs_analyse_delall  = uimenu(m_tdfs_analyse, 'label', 'Delete all filters', 'enable', 'off');
+      m_tdfs_analyse_shiftDC = uimenu(m_tdfs_analyse, 'label', 'Shift DC', 'separator', 'on', ...
+                                      'callback', {@click_shiftDC, fig_no});
 
   end % switch
 
@@ -1529,10 +1541,27 @@ end % function
 function apply_shift_DC()
 
   global shift_DC
+  global pos_relative
+  global tdfs
 
-  if (~isempty(shift_DC))
-    % YET-TO-DO ...
+  % First, a bit of error checking
+  if (isempty(shift_DC))
+    shift_DC = [0,0];
   end % if
+
+  if (isempty(pos_relative))
+    pos_relative = [0,0];
+  end % if
+
+  shift_amount = shift_DC + pos_relative;
+
+  % Convert shift_amount to "pixel" units
+  pixel_size = [1, 1/rows(tdfs)];
+  shift_amount = round(shift_amount ./ pixel_size);
+
+  % And do the shift (as simple as that!)
+  tdfs = shift(tdfs, shift_amount(1), 2); % in the x-direction
+  tdfs = shift(tdfs, shift_amount(2), 1); % in the y-direction
 
 end % function
 
@@ -2211,7 +2240,7 @@ function collect_p2p3_click(src, button)
   if (button == 1) % Left mouse click
 
     % Get the clicked point
-    pos = get_curr_pos(gca(), quantise);
+    pos = get_curr_pos(gca, quantise);
 
     % Calculate P2 and P3 hat (remember to round for pixels)
     P2hat = period/pos(1);
@@ -2301,8 +2330,6 @@ function collect_filter_click(src, button, click_no, hor_or_vert)
       set(src, "windowbuttondownfcn", orig_windowbuttondownfcn_filter);
       set(src, "windowbuttonmotionfcn", orig_windowbuttonmotionfcn_filter);
       set(src, "keypressfcn", orig_keypressfcn_filter);
-
-      title("");
   end % switch
 
   replot(6);
@@ -2322,17 +2349,32 @@ function collect_quantise_keypress(src, evt, newtitle_stem)
 
 end % function
 
-function pos = get_curr_pos(hax, quantised)
+function pos = get_curr_pos(h, quantised)
 
-  point = get(hax, "currentpoint");
+  point = get(h, "currentpoint");
+  point = point(1,1:2);
+
+  % If a figure handle was passed, then the "point" is in "figure"
+  % coordinates (i.e. in pixels measured from lower-left corner of
+  % plot window, and needs to be converted to axes coordinates
+  if (isfigure(h))
+    hax       = gca();
+    ax_pos    = get(hax, "position");
+    fig_pos   = get(h, "position");
+    fig_width = fig_pos(3:4);
+    ax_lims   = axis()(1:4);
+    ax_width  = diff(reshape(ax_lims,2,2));
+    ax_orig   = ax_lims(1,3);
+    point     = (point./fig_width - ax_pos(1:2)) ./ ax_pos(3:4).*ax_width + ax_orig;
+  end % if
 
   if (quantised)
     global timeseries_grid
     dx = 1;                               % Size of a pixel in the x-direction (in the 2DFS)
     dy = 1/rows(timeseries_grid);         % Size of a pixel in the y-direction (in the 2DFS)
-    pos = [round(point(1,1)/dx) * dx, round(point(1,2)/dy) * dy];
+    pos = [round(point(1)/dx) * dx, round(point(2)/dy) * dy];
   else
-    pos = [point(1,1), point(1,2)];
+    pos = [point(1), point(2)];
   end % if
 
 end % function
@@ -2413,3 +2455,78 @@ function keypress_deletefilter(src, evt)
   end % if
 
 end % function
+
+function click_shiftDC(src, data, fig_no)
+
+  global fig_handles
+  global orig_windowbuttondownfcn_shiftDC
+
+  h = fig_handles(fig_no);
+  orig_windowbuttondownfcn_shiftDC = get(h, "windowbuttondownfcn");
+
+  get_axes(fig_no);
+
+  set(h, "windowbuttondownfcn", @buttondown_shiftDC);
+
+  title("Click and drag to shift the origin\nRight click to confirm");
+
+end % function
+
+function buttondown_shiftDC(src, button)
+
+  switch button
+    case 1 % Left button = initiate drag
+      global pos_start
+      global orig_windowbuttonmotionfcn_shiftDC
+      global orig_windowbuttonupfcn_shiftDC
+
+      pos_start = get_curr_pos(gcf, true);
+
+      orig_windowbuttonmotionfcn_shiftDC = get(src, "windowbuttonmotionfcn");
+      orig_windowbuttonupfcn_shiftDC     = get(src, "windowbuttonupfcn");
+
+      set(src, "windowbuttonmotionfcn", @buttonmotion_shiftDC)
+      set(src, "windowbuttonupfcn",     @buttonup_shiftDC);
+    case 3 % Right button = confirm and stop
+      global orig_windowbuttondownfcn_shiftDC
+      set(src, "windowbuttondownfcn", orig_windowbuttondownfcn_shiftDC);
+      title("");
+  end % switch
+  
+end % function
+
+function buttonmotion_shiftDC(src, button)
+
+  global pos_start
+  global pos_relative % <-- this global variable will get used in plot_tdfs()
+                      %     for "live" shifting feedback
+
+  % Get current (quantised) mouse position
+  pos_curr = get_curr_pos(gcf, true);
+
+  % Work out how much has been moved since the initial button down
+  pos_relative = pos_curr - pos_start;
+
+  % Update plot
+  replot(6);
+  title("Click and drag to shift the origin\nRight click to confirm");
+
+end % function
+
+function buttonup_shiftDC(src, button)
+
+  global pos_relative
+  global shift_DC
+
+  global orig_windowbuttonmotionfcn_shiftDC
+  global orig_windowbuttonupfcn_shiftDC
+
+  % Update shift_DC and reset pos_relative
+  shift_DC        += pos_relative;
+  pos_relative(:)  = 0;
+
+  set(src, "windowbuttonmotionfcn", orig_windowbuttonmotionfcn_shiftDC);
+  set(src, "windowbuttonupfcn",     orig_windowbuttonupfcn_shiftDC);
+
+end % function
+
