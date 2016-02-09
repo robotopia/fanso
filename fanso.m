@@ -35,7 +35,8 @@ function fanso()
                              % (4) = harmonic resolved fluctuation spectrum plot (HDFS)
                              % (5) = waterfall plot of timeseries modulo period
                              % (6) = Two-dimensional fluctuation spectrum (2DFS)
-  fig_functions = {@plot_timeseries, @plot_fft, @plot_profile, @plot_hrfs, @plot_waterfall, @plot_tdfs};
+                             % (7) = E&S analysis results: the complex modulation envelope
+  fig_functions = {@plot_timeseries, @plot_fft, @plot_profile, @plot_hrfs, @plot_waterfall, @plot_tdfs, @plot_cplxenv};
 
   % Initialise global variables relating to plots
   init_plot_variables();
@@ -777,6 +778,10 @@ function create_figure(src, data, fig_no)
       fig_handles(fig_no) = figure("Name", "2D Fluctuation Spectrum", ...
                                    "CloseRequestFcn", {@close_figure, fig_no});
 
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+      % Set up menu for 2DFS figure %
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
       create_plot_menu(fig_no);
       create_colormap_menu(fig_no);
       m_tdfs_analyse         = uimenu('label', 'Analyse');
@@ -791,6 +796,17 @@ function create_figure(src, data, fig_no)
       m_tdfs_analyse_delall  = uimenu(m_tdfs_analyse, 'label', 'Delete all filters', 'enable', 'off');
       m_tdfs_analyse_shiftDC = uimenu(m_tdfs_analyse, 'label', 'Shift DC', 'separator', 'on', ...
                                       'callback', {@click_shiftDC, fig_no});
+      m_tdfs_analyse_cplxenv = uimenu(m_tdfs_analyse, 'label', 'Plot complex envelopes', 'separator', 'on', 'callback', @plot_cplxenv);
+
+    case 7 % The complex envelope = the result of E&S (2002) analysis
+      fig_handles(fig_no) = figure("Name", "Complex Envelope", ...
+                                   "CloseRequestFcn", {@close_figure, fig_no});
+
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+      % Set up menu for Complex Envelope figure %
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+      % Empty menu %
 
   end % switch
 
@@ -1540,6 +1556,79 @@ function plot_tdfs(src, data)
     title_string = sprintf('P2 = P1/%f\nP3 = P1*%f', period/P2hat, P3hat/period);
     title(title_string);
   end % if
+
+end % function
+
+function plot_cplxenv(src, data, fig_no)
+
+  global fig_handles
+  global plot_params
+
+  global tdfs
+
+  global period
+  global only_visible
+
+  % Switch to/Create 2DFS figure and keep track of the view window
+  fig_no = 7;
+  first_time = (fig_handles(fig_no) == 0);
+
+  if (first_time)
+    create_figure(0,0,fig_no);
+  end % if
+
+  figure(fig_handles(fig_no));
+
+  % Assume: tdfs has already been calculated by now
+
+  % Now calculate the inverse 2DFS (=m_{phi,t} in E&S(2002))
+  M = ifft2(tdfs);
+
+  % Do singular-value decomposition on m_{phi,t} = m_phi(phi) * m_t(t)
+  [U,S,V] = svd(M);
+  m_t     = U(:,1) * sqrt(S(1,1));
+  m_phi   = V(:,1) * sqrt(S(1,1));
+
+  % Calculate various x-axes
+  if (only_visible)
+    tmin = max([floor(plot_params(1,1)/period),0]) + 1;
+    tmax = tmin + length(m_t) - 1;
+  else
+    tmin = 1;
+    tmax = length(m_t);
+  end % if
+
+  pulse_no = [tmin:tmax];
+  longitude = [0:(length(m_phi)-1)] / length(m_phi) * 360;
+
+  subplot(2,2,1);
+  plot(pulse_no, abs(m_t));
+  xlabel("Pulse Number");
+  ylabel("Amplitude");
+
+  subplot(2,2,2);
+  plot(longitude, abs(m_phi));
+  xlabel("Pulse longitude");
+  ylabel("Amplitude");
+
+  subplot(2,2,3);
+  plot(pulse_no, arg(m_t) * 180/pi, 'x');
+  xlabel("Pulse Number");
+  ylabel("Phase");
+
+  subplot(2,2,4);
+  plot(longitude, arg(m_phi) * 180/pi, 'x');
+  xlabel("Pulse longitude");
+  ylabel("Phase");
+
+  % Calculate the "signal-to-noise" of the result
+  SNR = S(1,1) / (trace(S) - S(1,1)); % <-- Not sure if this is the correct way to do it...
+
+  set(fig_handles(fig_no), "Name", sprintf('Complex Envelope: \"SNR?\" = %f', SNR));
+  for n=1:10
+    S(n,n)
+  end % for
+  fflush(stdout);
 
 end % function
 
