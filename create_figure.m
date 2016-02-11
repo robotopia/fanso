@@ -25,14 +25,21 @@ function create_figure(plot_name)
 
     % Create a data menu for the timeseries plot
     if (strcmp(plot_name, "timeseries"))
+      % Are there data? If not, disable some menu items
+      if (isempty(data))
+        enable_state = "off";
+      else
+        enable_state = "on";
+      end % if
+
       global m_data_save m_data_saveas m_data_export
-      m_data               = uimenu('label', '&Data');
-      m_data_new           = uimenu(m_data, 'label', '&New',        'callback', @new_fan);
-      m_data_open          = uimenu(m_data, 'label', '&Open...',    'callback', @load_fan);
-      m_data_save          = uimenu(m_data, 'label', '&Save',       'callback', @save_fan,   'enable', 'off');
-      m_data_saveas        = uimenu(m_data, 'label', 'Save &As...', 'callback', @saveas_fan, 'enable', 'off');
-      m_data_import        = uimenu(m_data, 'label', '&Import timeseries...', 'callback', @import_timeseries, 'separator', 'on');
-      m_data_export        = uimenu(m_data, 'label', '&Export timeseries...', 'callback', @export_timeseries, 'enable', 'off');
+      m_data         = uimenu("label", "&Data");
+      m_data_new     = uimenu(m_data, "label", "&New",        "callback", @new_fan);
+      m_data_open    = uimenu(m_data, "label", "&Open..",    "callback", @load_fan);
+      m_data_save    = uimenu(m_data, "label", "&Save",       "callback", @save_fan,   "enable", enable_state);
+      m_data_saveas  = uimenu(m_data, "label", "Save &As..", "callback", @saveas_fan, "enable", enable_state);
+      m_data_import  = uimenu(m_data, "label", "&Import timeseries..", "callback", @import_timeseries, "separator", "on");
+      m_data_export  = uimenu(m_data, "label", "&Export timeseries..", "callback", @export_timeseries, "enable", enable_state);
     end % if
 
   end % if
@@ -74,9 +81,6 @@ end % function
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 function load_fan()
 
-  global filepath;
-  global filename;
-
   global figures;
 
   % Ask about unsaved changes
@@ -88,16 +92,7 @@ function load_fan()
   [loadfile, loadpath] = uigetfile({"*.fan", "FANSO file"});
 
   if (~strcmp(loadpath, "0")) % then they actually selected a file
-    try
-      % Load file contents
-      load("-binary", [loadpath, loadfile]);
-    catch
-      errordlg({["Unable to load file \"", loadfile, "\""], lasterr()});
-    end % try_catch
-
-    % Store file name + path in global variables
-    filename = loadfile;
-    filepath = loadpath;
+    load_data(loadpath, loadfile);
 
     % Reset unsaved changes flag
     set_unsaved_changes(false);
@@ -166,6 +161,9 @@ function import_timeseries()
   global data;
   global plots;
   global analysis;
+
+  global filename;
+  global filepath;
 
   % Ask about unsaved changes
   if (~offer_to_save())
@@ -251,12 +249,20 @@ function import_timeseries()
     drawfcn();
 
     % Change which menu items are enabled
-    global m_data_saveas m_data_export;
+    global m_data_save m_data_saveas m_data_export;
     set([m_data_saveas, m_data_export], "enable", "on");
+    set(m_data_save, "enable", "off");
 
     % Set callback function for when a key is pressed
     % (in case it was unset by new_fan())
     set(figures.timeseries.fig_handle, "keypressfcn", @keypressfcn);
+
+    % Clear the (saved) filename and path variables
+    filename = [];
+    filepath = [];
+
+    % Are there changes? Yes!
+    set_unsaved_changes(true);
 
   end % if
 
@@ -399,7 +405,7 @@ function keypressfcn(src, evt)
               "F7 = plot modulation envelopes",
               "0 = toggle zero-padding",
               "^ = toggle show peaks",
-              "b = add/remove breakpoints",
+              "b = toggle breakpoint edit mode",
               "f = flatten timeseries",
               "h = display this help",
               "l = toggle logarithmic plot for current figure",
@@ -431,19 +437,51 @@ function keypressfcn(src, evt)
       %%%%%%%%%%%%%%%%%%%
       % Add breakpoints %
       %%%%%%%%%%%%%%%%%%%
-      analysed.old_apply_bps   = analysis.apply_bps;
-      analysed.old_breakpoints = analysis.breakpoints;
-      analysed.title           = "Left mouse button = add breakpoint; right = remove breakpoint; Enter = finished";
-
-      if (analysis.apply_bps)
-        analysis.apply_bps = 0; % i.e. turn it OFF (temporarily)
-        figures.timeseries.drawfcn();
+      if (~isfield(analysed, "bp_editmode"))
+        analysed.bp_editmode = false;
       end % if
 
-      title(figures.timeseries.ax_handle, analysed.title);
+      if (analysed.bp_editmode) % i.e. it is in edit mode when b was pressed
+        
+        analysis.apply_bps = analysed.old_apply_bps; % i.e. return apply_bps to its former value
+        figures.timeseries.drawfcn();
 
-      set(figures.timeseries.fig_handle, "windowbuttondownfcn", @collect_breakpoint_clicks);
-      set(figures.timeseries.fig_handle, "keypressfcn",         @collect_breakpoint_keypress);
+        % If there have been changes, update all figures (they will all be affected)
+        if (~isequal(analysed.old_breakpoints, analysis.breakpoints))
+          set_unsaved_changes(true);
+          plot_names = fieldnames(figures);
+          for n = 1:length(plot_names)
+            if (~strcmp(plot_names{n}, "timeseries"))
+              figures.(plot_names{n}).drawfcn();
+            end % if
+          end % for
+        end % if
+
+        % Clear the title
+        title(figures.timeseries.ax_handle, "");
+
+        % Reset callback functions
+        set(figures.timeseries.fig_handle, "windowbuttondownfcn", []);
+
+      else % i.e. it is NOT in edit mode when b was pressed
+
+        analysed.old_apply_bps   = analysis.apply_bps;
+        analysed.old_breakpoints = analysis.breakpoints;
+        analysed.title           = "Left mouse button = add breakpoint; right = remove breakpoint";
+
+        if (analysis.apply_bps)
+          analysis.apply_bps = 0; % i.e. turn it OFF (temporarily)
+          figures.timeseries.drawfcn();
+        end % if
+
+        title(figures.timeseries.ax_handle, analysed.title);
+
+        set(figures.timeseries.fig_handle, "windowbuttondownfcn", @collect_breakpoint_clicks);
+
+      end % if
+
+      % Flip the mode
+      analysed.bp_editmode = ~analysed.bp_editmode;
 
     case 'f'
       %%%%%%%%%%%%%%%%%%
@@ -642,37 +680,4 @@ function remove_breakpoint(x)
   global analysis;
   [dummy, nearest_idx] = min(abs(analysis.breakpoints - x));
   analysis.breakpoints = setdiff(analysis.breakpoints, analysis.breakpoints(nearest_idx)); % <-- remove a breakpoint
-end % function
-
-function collect_breakpoint_keypress(src, evt)
-
-  global figures;
-  global analysis;
-  global analysed;
-
-  if (strcmp(evt.Key, "return"))
-
-    analysis.apply_bps = analysed.old_apply_bps; % i.e. return apply_bps to its former value
-    figures.timeseries.drawfcn();
-
-    % If there have been changes, update all figures (they will all be affected)
-    if (~isequal(analysed.old_breakpoints, analysis.breakpoints))
-      set_unsaved_changes(true);
-      plot_names = fieldnames(figures);
-      for n = 1:length(plot_names)
-        if (~strcmp(plot_names{n}, "timeseries"))
-          figures.(plot_names{n}).drawfcn();
-        end % if
-      end % for
-    end % if
-
-    % Clear the title
-    title(figures.timeseries.ax_handle, "");
-
-    % Reset callback functions
-    set(figures.timeseries.fig_handle, "windowbuttondownfcn", []);
-    set(figures.timeseries.fig_handle, "keypressfcn",         @keypressfcn);
-
-  end % if
-
 end % function

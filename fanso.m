@@ -62,16 +62,22 @@ function fanso(init_filename)
   % Load known pulsar periods
   load_periods();
 
-  % Draw the main (=timeseries) window
-  create_figure("timeseries");
+  % Load initial file, if given
+  if (nargin == 1)
+    load_data("", init_filename);
+
+    % Draw the main (=timeseries) window
+    create_figure("timeseries");
+
+    % Plot it up
+    figures.timeseries.drawfcn();
+  else
+    % Just create the figure window
+    create_figure("timeseries");
+  end % if
 
   % Initially, ensure that there are no changes to be saved
   set_unsaved_changes(false);
-
-  % Load initial file, if given
-  if (nargin == 1)
-    load_fan(init_filename);
-  end % if
 
 end % function
 
@@ -98,205 +104,6 @@ end % function
 %%%%%%%%%%%%%%%%%%%%%
 % Everything after this point will eventually be relocated
 %
-
-function Xtoggle_flatten(src, data)
-
-  global fig_handles; % <-- is this (and other similar lines) needed?
-
-  global apply_bps
-  apply_bps = ~apply_bps;
-
-  set_unsaved_changes(true);
-
-  if (apply_bps)
-    set(src, 'checked', 'on');
-  else
-    set(src, 'checked', 'off');
-  end % if
-
-  % Redraw plots
-  get_axes();
-  replot();
-
-end % function
-
-function Xcreate_figureX(src, data, fig_no)
-
-  global fig_handles
-
-  switch fig_no
-
-    case 2 % The FFT figure
-      global screensize
-      global gapsize
-
-      winsize_x  = screensize(3) - 2*gapsize;
-      winsize_y  = floor((screensize(4) - 3*gapsize)/2);
-      winpos_x   = gapsize;
-      winpos_y   = gapsize;
-
-      fig_handles(fig_no) = figure("Name", "Fourier Transform", ...
-                                   "Position", [winpos_x, winpos_y, winsize_x, winsize_y], ...
-                                   "CloseRequestFcn", {@close_figure, fig_no});
-
-      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-      % Set up menu for  FFT figure %
-      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-      m_plot           = create_plot_menu(fig_no);
-
-      m_analyse        = uimenu('label', '&Analyse');
-      m_analyse_period = uimenu(m_analyse, 'label', '&Select period (P1)', 'callback', @select_period);
-
-    case 3 % The profile figure
-      fig_handles(fig_no) = figure("Name", "Profile", ...
-                                   "CloseRequestFcn", {@close_figure, fig_no});
-
-      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-      % Set up menu for profile figure %
-      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-      create_plot_menu(fig_no);
-
-      m_mask        = uimenu('label', '&Mask');
-      m_mask_clear  = uimenu(m_mask, 'label', '&Clear', 'callback', @clear_mask);
-      m_mask_select = uimenu(m_mask, 'label', '&Select', 'callback', @select_mask);
-
-    case 4 % The harmonic resolved fluctuation spectrum figure
-      fig_handles(fig_no) = figure("Name", "Harmonic Resolved Fluctuation Spectrum", ...
-                                   "CloseRequestFcn", {@close_figure, fig_no});
-
-      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-      % Set up menu for HRFS figure %
-      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-      create_plot_menu(fig_no);
-      create_colormap_menu(fig_no);
-
-    case 5 % The waterfall plot of the timeseries
-      fig_handles(fig_no) = figure("Name", "Waterfall plot", ...
-                                   "CloseRequestFcn", {@close_figure, fig_no});
-
-      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-      % Set up menu for waterfall figure %
-      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-      global m_waterfall_colormap
-      m_plot     = create_plot_menu(fig_no);
-      m_plot_2D  = uimenu(m_plot, 'label', '2D', 'accelerator', '2', 'separator', 'on', ...
-                                  'callback', {@set_waterfall_plot_type, 0});
-      m_plot_3D  = uimenu(m_plot, 'label', '3D', 'accelerator', '3', ...
-                                  'callback', {@set_waterfall_plot_type, 1});
-      m_waterfall_colormap = create_colormap_menu(fig_no);
-
-    case 6 % The 2DFS plot
-      fig_handles(fig_no) = figure("Name", "2D Fluctuation Spectrum", ...
-                                   "CloseRequestFcn", {@close_figure, fig_no});
-
-      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-      % Set up menu for 2DFS figure %
-      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-      create_plot_menu(fig_no);
-      create_colormap_menu(fig_no);
-      m_tdfs_analyse         = uimenu('label', 'Analyse');
-      m_tdfs_analyse_peaks   = uimenu(m_tdfs_analyse, 'label', 'Show peaks', 'callback', @toggle_peaks);
-      m_tdfs_analyse_p2p3    = uimenu(m_tdfs_analyse, 'label', 'Choose P2, P3', 'callback', {@click_p2p3, fig_no});
-      m_tdfs_analyse_hfilt   = uimenu(m_tdfs_analyse, 'label', 'Create horizontal filter', 'separator', 'on', ...
-                                      'callback', {@create_filter, fig_no, "horizontal"});
-      m_tdfs_analyse_vfilt   = uimenu(m_tdfs_analyse, 'label', 'Create vertical filter', ...
-                                      'callback', {@create_filter, fig_no, "vertical"});
-      m_tdfs_analyse_delfilt = uimenu(m_tdfs_analyse, 'label', 'Delete filter', 'separator', 'on', ...
-                                      'callback', {@delete_filter, fig_no});
-      m_tdfs_analyse_delall  = uimenu(m_tdfs_analyse, 'label', 'Delete all filters', 'enable', 'off');
-      m_tdfs_analyse_shiftDC = uimenu(m_tdfs_analyse, 'label', 'Shift DC', 'separator', 'on', ...
-                                      'callback', {@click_shiftDC, fig_no});
-      m_tdfs_analyse_modenv = uimenu(m_tdfs_analyse, 'label', 'Plot complex envelopes', 'separator', 'on', 'callback', @plot_modenv);
-
-    case 7 % The complex envelope = the result of E&S (2002) analysis
-      fig_handles(fig_no) = figure("Name", "Complex Envelope", ...
-                                   "CloseRequestFcn", {@close_figure, fig_no});
-
-      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-      % Set up menu for Complex Envelope figure %
-      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-      % Empty menu %
-
-  end % switch
-
-end % function
-
-function Xm_plot = create_plot_menu(fig_no, parent = 0)
-
-  global fig_handles
-  figure(fig_handles(fig_no));
-
-  % Plot menu
-  if (parent)
-    m_plot = uimenu(parent, 'label', 'Plot');
-  else
-    m_plot = uimenu('label', 'Plot');
-  end % if
-
-  % Children menu items
-  m_plot_save = uimenu(m_plot, 'label', 'Redraw all plots', 'accelerator', '1', 'callback', {@update_plots, fig_no});
-
-  % For FFT plots, allow option of plotting absolute values or power
-  if (any(fig_no == [2,4,6])) % 2, 4, 6 are the FFT plots
-    m_plot_abs   = uimenu(m_plot, 'label', 'Amplitudes', 'separator', 'on', 'callback', {@set_fft_plot_type, fig_no, nan});
-    m_plot_power = uimenu(m_plot, 'label', 'Power', 'callback', {@set_fft_plot_type, fig_no, 2});
-  end
-
-  % Allow the option to turn on/off log-plotting for select axes depending on the plot type
-  switch fig_no
-    case {2} % FFT plot
-      m_plot_xlog = uimenu(m_plot, 'label', 'Log x-axis', 'separator', 'on', 'callback', {@toggle_log, fig_no, 'x'});
-      m_plot_ylog = uimenu(m_plot, 'label', 'Log y-axis', 'callback', {@toggle_log, fig_no, 'y'});
-    case {4,6} % HRFS and 2DFS plots
-      m_plot_clog = uimenu(m_plot, 'label', 'Log pixel values', 'separator', 'on', 'callback', {@toggle_log, fig_no, 'c'});
-  end % switch
-
-end % function
-
-function Xm_colormap = create_colormap_menu(fig_no, plot_no)
-
-  global plot_params
-  global fig_handles
-  figure(fig_handles(fig_no));
-
-  % Parent menu
-  m_colormap = uimenu('label', '&Colormap');
-
-  % Children menu items
-  m_type = uimenu(m_colormap, 'label', 'Type');
-
-  type_list = colormap("list");
-  for n = 1:length(type_list)
-    uimenu(m_type, 'label', type_list{n}, 'callback', {@set_colormap_type, fig_no, n});
-  end % for
-
-  uimenu(m_colormap, 'label', 'Invert', 'checked', on_off(plot_params(fig_no, 18)), ...
-                     'callback', {@toggle_plot_param, plot_no, "cinv"});
-  uimenu(m_colormap, 'label', 'Set dynamic range limits', 'separator', 'on', ...
-                     'callback', {@scale_caxis, plot_no, 0, 0});
-  uimenu(m_colormap, 'label', 'Increase Max by 10% of range', 'accelerator', '+', ...
-                     'callback', {@scale_caxis, plot_no, 0,  0.1});
-  uimenu(m_colormap, 'label', 'Decrease Max by 10% of range', 'accelerator', '_', ...
-                     'callback', {@scale_caxis, plot_no, 0, -0.1});
-  uimenu(m_colormap, 'label', 'Increase Min by 10% of range', 'accelerator', '=', ...
-                     'callback', {@scale_caxis, plot_no,  0.1, 0});
-  uimenu(m_colormap, 'label', 'Decrease Min by 10% of range', 'accelerator', '-', ...
-                     'callback', {@scale_caxis, plot_no, -0.1, 0});
-
-end % function
-
-function Xupdate_plots(src, data)
-
-  get_axes();
-  replot();
-
-end % function
 
 function Xset_waterfall_plot_type(src, data, newvalue)
 
