@@ -1,4 +1,4 @@
-function fanso()
+function fanso(init_filename)
 % -- Function: fanso ()
 %     Analyse a timeseries using the Fourier ANalysis Suite for Octave.
 %     Requires FLTK.
@@ -7,9 +7,9 @@ function fanso()
 %     sammy.mcsweeney@gmail.com
 
   % First, check if there is already an instance of FANSO open
-  global FANSO_INSTANCE
-  if (isempty(FANSO_INSTANCE)) % i.e. there is NO instance already open
-    FANSO_INSTANCE = 1;
+  global __FANSO_INSTANCE__
+  if (isempty(__FANSO_INSTANCE__)) % i.e. there is NO instance already open
+    __FANSO_INSTANCE__ = 1;
   else
     % Exit gracefully
     disp('FANSO already running');
@@ -25,591 +25,81 @@ function fanso()
     graphics_toolkit(gtk);
   end % if
 
-  % Setup figure handling system
-  global fig_handles;
-  global fig_functions;
-  fig_handles = zeros(10,1); % 10 is arbitrary. Should be more than enough. Increase if needed.
-                             % (1) = timeseries plot
-                             % (2) = FFT plot
-                             % (3) = profile plot
-                             % (4) = harmonic resolved fluctuation spectrum plot (HDFS)
-                             % (5) = waterfall plot of timeseries modulo period
-                             % (6) = Two-dimensional fluctuation spectrum (2DFS)
-                             % (7) = E&S analysis results: the complex modulation envelope
-  fig_functions = {@plot_timeseries, @plot_fft, @plot_profile, @plot_hrfs, @plot_waterfall, @plot_tdfs, @plot_cplxenv};
+  % No file is loaded yet...
+  global filename
+  filename = [];
 
-  % Initialise global variables relating to plots
-  init_plot_variables();
+  % Setup figure and plot handling system
+  global figures;
+  figures = struct();
+
+  plot_names = {"timeseries", "fft", "profile", "hrfs", "waterfall", "tdfs", "modenv"};
+  plot_dims  = [1, 1, 1, 2, 2, 2, 1];
+  plot_isfft = [0, 1, 0, 1, 0, 1, 0];
+
+  for n = 1:length(plot_names)
+    figures.(plot_names{n}).drawfcn     = str2func(["plot_", plot_names{n}]); % Function that does the plotting
+    figures.(plot_names{n}).fig_handle  = [];                                 % Handle to the figure
+    figures.(plot_names{n}).ax_handle   = [];                                 % Handle(s) to the plot axes
+    figures.(plot_names{n}).quantise    = 0;                                  % Whether a click is rounded to the nearest "image pixel"
+    figures.(plot_names{n}).dims        = plot_dims(n);                       % Number of dimensions in plot
+    figures.(plot_names{n}).isfft       = plot_isfft(n);                      % Whether the plot is of type "FFT"
+  end % for
+
+  % Set the default positions for the timeseries and fft figures
+  screensize = get(0, 'screensize');
+  gapsize    = 100;
+
+  winsize_x  = screensize(3) - 2*gapsize;
+  winsize_y  = floor((screensize(4) - 3*gapsize)/2);
+  winpos_x   = gapsize;
+  winpos_y   = 2*gapsize + winsize_y;
+  figures.timeseries.defaultpos = [winpos_x, winpos_y, winsize_x, winsize_y];
+
+  winpos_y   = gapsize;
+  figures.fft.defaultpos = [winpos_x, winpos_y, winsize_x, winsize_y];
 
   % Load known pulsar periods
   load_periods();
 
-  % Draw the (empty) plot for the first time
-  plot_timeseries();
+  % Draw the main (=timeseries) window
+  create_figure("timeseries");
 
   % Initially, ensure that there are no changes to be saved
   set_unsaved_changes(false);
 
-end % function
-
-function init_plot_variables()
-% Initialise global variables that need resetting upon program startup
-% and whenever a new time series is imported.
-
-  % The "main" global variables relating to the data themselves
-  global dt                  % the time between samples in the timeseries (in seconds)
-  global timeseries          % the original timeseries
-  global profile_mask        % A pair of phases that define a region of phases to be ignored in the breakpoint linear fits
-  global fft_plot_type       % 0 = amplitudes;  1 = power
-  global waterfall_plot_type % 0 = 2D color;  1 = 3D heights
-  global period              % The folding period (P1)
-  global P2hat               % The measured longitudinal "time" between subpulses, P2
-  global P3hat               % The measured "time" between subpulses at the same phase, P3
-  global nprofile_bins       % The number of bins to be used for folding output
-
-  % Variables for the size and position of the figure windows
-  global screensize
-  global gapsize
-
-  % Variables for the plot settings
-  global zeromean       % 0 = Do nothing;               1 = Zero mean before applying FFT
-  global zeropad        % 0 = Do nothing;               1 = Zero-pad to a nearly-whole number of periods
-  global only_visible   % 0 = FFT of entire timeseries; 1 = FFT of only visible timeseries
-  global apply_hamming  % 0 = Do nothing;               1 = Apply Hamming window
-  global apply_hanning  % 0 = Do nothing;               1 = Apply Hanning window
-  global apply_bps      % 0 = Do nothing;               1 = Apply breakpoints (i.e. "flatten" timeseries)
-  global show_peaks     % 0 = Do nothing;               1 = Plot positions of local maxima in 2DFS
-
-  % A global variable for the breakpoints
-  global breakpoints
-
-  % A global variable for keeping track of the name of the loaded file
-  global filename
-
-  % Plot viewing parameters
-  global fig_functions
-  global plot_params
-
-  global quantise      % When using mouse to click on images, snap to nearest pixel centre?
-  global filters       % Horizontal and vertical filters (E&S 2002 - style) used on the 2DFS
-  global shift_DC      % Horizontal and vertical displacement of the origin in the 2DFS
-
-  plot_params = nan(length(fig_functions), 18);
-    % 12 plot parameters to be stored here are:
-    %    xmin, xmax, ymin, ymax, zmin, zmax, cmin, cmax,  % <-- real numbers
-    %    xlog, ylog, zlog, clog,                          % <-- bools
-    %    xexp, yexp, zexp, cexp,                          % <-- real numbers
-    %    cmap,                                            % <-- integers
-    %    cinv                                             % <-- bools
-  % Set log params to 0
-  plot_params(:, 9:12) = 0;
-  % Set cmap to grayscale
-  plot_params(:, 17) = 8;
-  plot_params(:, 18) = 0;
-  % Set profile plot x-axis to [0,1] (phase)
-  plot_params(3,1:2) = [0,1];
-
-  timeseries          = zeros(100,1);
-  dt                  = 1;
-  profile_mask        = [0,0];
-  fft_plot_type       = 0;
-  waterfall_plot_type = 0;
-  clear period
-  clear P2hat
-  clear P3hat
-  clear nprofile_bins
-
-  screensize = get(0, 'screensize');
-  gapsize    = 100;
-
-  zeromean      = 0;
-  zeropad       = 0;
-  only_visible  = 0;
-  apply_hamming = 0;
-  apply_hanning = 0;
-  apply_bps     = 0;
-  show_peaks    = 0;
-
-  breakpoints = [];
-
-  filename = [];
-
-  quantise = 1;
-  clear filters
-  shift_DC = [0,0];
-
-  set_unsaved_changes(false);
-
-end % function
-
-function set_unsaved_changes(newval)
-
-  global unsaved_changes
-  global fig_handles
-  global filename
-
-  unsaved_changes = newval;
-
-  h = fig_handles(1);
-  if (h) % If main timeseries window exists and is open
-
-    fig_name = ["Timeseries"];
-
-    if (filename)
-      fig_name = [fig_name, ": ", filename];
-    end % if
-
-    if (unsaved_changes)
-      % Add a "*" if there are unsaved changes
-      fig_name = [fig_name, "*"];
-    end
-
-    figure(h, "name", fig_name);
-  end
-
-end % function
-
-function save_data(filepathname)
-
-  % Get all relevant global variables in this scope
-  global dt
-  global timeseries
-  global profile_mask
-  global zeromean
-  global zeropad
-  global only_visible
-  global apply_hamming
-  global apply_hanning
-  global apply_bps
-  global show_peaks
-  global breakpoints
-  global nprofile_bins
-  global period
-  global P2hat
-  global P3hat
-  global plot_params
-  global filters
-  global shift_DC
-
-  % Save all the info!
-  save("-binary", ...
-        filepathname, ...
-        "dt", ...
-        "timeseries", ...
-        "profile_mask", ...
-        "zeromean", ...
-        "zeropad", ...
-        "only_visible", ...
-        "apply_hamming", ...
-        "apply_hanning", ...
-        "apply_bps", ...
-        "show_peaks", ...
-        "breakpoints", ...
-        "nprofile_bins", ...
-        "period", ...
-        "P2hat", ...
-        "P3hat", ...
-        "plot_params", ...
-        "shift_DC", ...
-        "filters");
-
-  set_unsaved_changes(false);
-
-end % function
-
-function save_fan(src, data)
-
-  global filepath
-  global filename
-
-  % Assumption: This function is only able to be called
-  %             if filepath and filename have proper values.
-
-  save_data([filepath, filename]);
-
-end % function
-
-function saveas_fan(src, data)
-
-  global filepath
-  global filename
-
-  % Open up a Save File dialog box
-  if (filepath && filename)
-    [savefile, savepath] = uiputfile([filepath, filename]);
-  else
-    [savefile, savepath] = uiputfile({"*.fan", "FANSO file"});
-  end % if
-
-  if (~strcmp(savepath, "0")) % then they actually selected a file
-    save_data([savepath, savefile]);
-    filepath = savepath;
-    filename = savefile;
+  % Load initial file, if given
+  if (nargin == 1)
+    load_fan(init_filename);
   end % if
 
 end % function
 
-function cont = offer_to_save()
-% Returns true if either nothing needs saving
-% or user chooses either Yes or No from the
-% dialog box. Returns false if they choose Cancel.
 
-  cont = true;
+function load_periods()
 
-  global unsaved_changes
-  global filename
-  global filepath
+  global pulsars
 
-  if (unsaved_changes)
-    dlg_answer = questdlg("Would you like to save your changes?", "Save changes?");
+  f = fopen('periods.dat');
 
-    switch dlg_answer
-      case "Yes"
-        if (filename && filepath)
-          save_fan();
-        else
-          saveas_fan();
-        end
-      case "Cancel"
-        cont = false;
-    end % switch
-  end % if
+  % First, count the lines
+  nlines = fskipl(f, Inf);
+  frewind(f);
+
+  % Now read them in
+  pulsars = struct();
+  for n = 1:nlines
+    [pulsarname, pulsarperiod] = fscanf(f, '%s %f', "C");
+    pulsars.(pulsarname).period = pulsarperiod;
+  end % for
 
 end % function
 
-function load_fan(src, data)
-
-  % Get all relevant global variables in this scope
-  global dt
-  global timeseries
-  global profile_mask
-  global zeromean
-  global zeropad
-  global only_visible
-  global apply_hamming
-  global apply_hanning
-  global apply_bps
-  global show_peaks
-  global breakpoints
-  global nprofile_bins
-  global period
-  global P2hat
-  global P3hat
-  global plot_params
-  global filters
-  global shift_DC
-
-  global filename
-  global filepath
-
-  % Ask about unsaved changes
-  if (~offer_to_save())
-    return
-  end % if
-
-  % Open up an Open File dialog box
-  [loadfile, loadpath] = uigetfile({"*.fan", "FANSO file"});
-
-  if (~strcmp(loadpath, "0")) % then they actually selected a file
-    try
-      % Load file contents
-      load("-binary", [loadpath, loadfile]);
-
-      % Store file name + path in global variables
-      filename = loadfile;
-      filepath = loadpath;
-
-      % Reset unsaved changes flag
-      set_unsaved_changes(false);
-
-      % Update menu checks and enables
-      update_timeseries_menu();
-
-      % If necessary, apply the profile mask
-      if (any(profile_mask)) % (i.e. profile mask is set -- profile_mask ~= [0,0])
-        apply_profile_mask();
-      end % if
-
-      % (Re-)plot all
-      replot();
-    catch
-      errordlg({["Unable to load file \"", loadfile, "\""], lasterr()});
-    end % try_catch
-
-  end % if
-
-end % function
-
-function import_timeseries(src, data)
-
-  global timeseries
-
-  % Ask about unsaved changes
-  if (~offer_to_save())
-    return
-  end % if
-
-  % Get file from Open File dialog box
-  [loadfile, loadpath] = uigetfile();
-
-  if (loadfile ~= 0) % The user has actually chosen a file
-    try
-      % Load the contents of the selected file into a matrix
-      mat = load("-ascii", [loadpath, loadfile]);
-
-      % Reset all the variables
-      init_plot_variables();
-
-      % Warn the user if file contains more than one column of numbers
-      if (~isvector(mat))
-        warndlg("Input file contains multiple columns.\nReading only the first column as timeseries.", ...
-                "Multiple columns detected");
-      end % if
-
-      % Set the timeseries to the (first) column of values
-      timeseries = mat(:,1);
-
-      % Update menu checks and enables
-      update_timeseries_menu();
-
-      replot();
-    catch
-      errordlg("This file is in an unreadable format.\nSee the '-ascii' option in Octave's load() function for details", ...
-               "Open file error");
-    end % try
-  end % if
-
-end % function
-
-function set_sampling_rate(src, data)
-
-  global dt
-  global plot_params
-  global fig_handles
-
-  % Read in the new value via a dialog box
-  cstr = inputdlg({"Please enter the sampling rate (Hz):"}, "Set sampling rate", 1, {num2str(1/dt,15)});
-
-  if (~isempty(cstr))
-    newfs = str2num(cstr{1});
-
-    % Set unsaved changes flag
-    if (dt ~= 1/newfs)
-      set_unsaved_changes(true);
-    end % if
-
-    % Record the scale factor by which the dt value has changed
-    scale = 1/(newfs * dt);
-
-    % Update value
-    dt = 1/newfs;
-
-    % Rescale x axis of affected plots
-    get_axes(0,0,[1:2]);
-    plot_params(1,1:2) = plot_params(1,1:2) * scale;
-    plot_params(2,1:2) = plot_params(2,1:2) / scale; % (i.e. inverse for FFT)
-
-    % Update all figures (they will all be affected)
-    replot();
-  end % if
-
-end % function
-
-function toggle_hamming(src, data)
-
-  global apply_hamming
-  apply_hamming = ~apply_hamming;
-
-  set_unsaved_changes(true);
-
-  set(src, 'checked', on_off(apply_hamming));
-
-  % Redraw plots
-  get_axes(0,0,2);
-  replot(2);
-
-end % function
-
-function toggle_hanning(src, data)
-
-  global apply_hanning
-  apply_hanning = ~apply_hanning;
-
-  set_unsaved_changes(true);
-
-  set(src, 'checked', on_off(apply_hanning));
-
-  % Redraw plots
-  get_axes(0,0,2);
-  replot(2);
-
-end % function
-
-function toggle_zeromean(src, data)
-
-  global zeromean
-  zeromean = ~zeromean;
-
-  set_unsaved_changes(true);
-
-  set(src, 'checked', on_off(zeromean));
-
-  % Redraw plots
-  get_axes(0,0,2);
-  replot(2);
-
-end % function
-
-function toggle_zeropad(src, data)
-
-  global zeropad
-  global period
-  global m_fft_zeropad
-
-  zeropad = ~zeropad;
-
-  set_unsaved_changes(true);
-
-  if (nargin < 2)
-    src = m_fft_zeropad;
-  end % if
-
-  if (zeropad)
-    if (isempty(period))
-      get_period_from_user();
-    end % if
-  end % if
-
-  set(src, 'checked', on_off(zeropad));
-
-  % Redraw plots
-  get_axes(0,0,2);
-  replot(2); % FFT
-
-end % function
-
-function toggle_visible(src, data)
-
-  global only_visible
-  only_visible = ~only_visible;
-
-  set_unsaved_changes(true);
-
-  set(src, 'checked', on_off(only_visible));
-
-  % Redraw plots
-  get_axes();
-  replot();
-
-end % function
-
-function toggle_invert(src, data, fig_no)
-
-  global plot_params
-  plot_params(fig_no, 18) = ~plot_params(fig_no, 18);
-
-  set_unsaved_changes(true);
-
-  set(src, 'checked', on_off(plot_params(fig_no, 18)));
-
-  get_axes(0,0,fig_no);
-  replot(fig_no);
-
-end % function
-
-function toggle_log(src, data, fig_no, axis_char)
-
-  global plot_params
-
-  % Get appropriate column numbers for plot_params
-  axis_no  = find(axis_char == "xyzc");
-  axis_idx = axis_no + 8; % x --> 9; y --> 10; z --> 11; c --> 12
-  max_idx = axis_no * 2;  % x --> 2; y --> 4;  z --> 6;  c --> 8
-  min_idx = max_idx - 1;  % x --> 1; y --> 3;  z --> 5;  c --> 7
-
-  % Toggle the "log" flag
-  islog = ~plot_params(fig_no, axis_idx);
-  plot_params(fig_no, axis_idx) = islog;
-
-  set_unsaved_changes(true);
-
-  set(src, 'checked', on_off(islog));
-
-  % Recalculate axis limits
-  get_axes(0,0,fig_no);
-
-  if (islog)
-    % If values are negative, enforce positive
-    if (plot_params(fig_no, min_idx) <= 0)
-      plot_params(fig_no, min_idx) = eps; % eps = smallest positive number
-    end % if
-    if (plot_params(fig_no, max_idx) <= 0) % Hopefully this never happens!
-      plot_params(fig_no, max_idx) = eps; % eps = smallest positive number
-    end % if
-
-    % Change axis limits of c-axis to logs
-    if (axis_char == 'c')
-      plot_params(fig_no, min_idx:max_idx) = log10(plot_params(fig_no, min_idx:max_idx));
-    end % if
-  else
-    if (axis_char == 'c')
-      plot_params(fig_no, min_idx:max_idx) = 10.^(plot_params(fig_no, min_idx:max_idx));
-    end % if
-  end % if
-
-  replot(fig_no);
-
-end % function
-
-function toggle_peaks(src, data)
-
-  global show_peaks
-  show_peaks = ~show_peaks;
-
-  set_unsaved_changes(true);
-
-  set(src, 'checked', on_off(show_peaks));
-
-  % Redraw plots
-  get_axes(0,0,6);
-  replot(6);
-
-end % function
-
-function add_breakpoints(src, data)
-
-  global fig_handles;
-  global breakpoints;
-  global apply_bps;
-  global m_bp_apply;
-
-  if (apply_bps)
-    toggle_flatten(m_bp_apply);
-  end % if
-
-  do
-    figure(fig_handles(1));
-    title("Left mouse button = add breakpoint; right = remove breakpoint; 's' = stop\nDON'T CLOSE THIS WINDOW!");
-    [x, y, button] = ginput(1);
-    switch button
-      case 1 % left mouse button
-        breakpoints = union(breakpoints, x);
-      case 3 % right mouse button
-        if (length(breakpoints) > 0)
-          [nearest_bpdiff, nearest_idx] = min(abs(breakpoints - x));
-          breakpoints = setdiff(breakpoints, breakpoints(nearest_idx));
-        end
-    end % switch
-    get_axes(0,0,1);
-    replot(1);
-  until (button == 115) % 115='s'
-  title('');
-
-  set_unsaved_changes(true);
-
-end % function
-
-function toggle_flatten(src, data)
+%%%%%%%%%%%%%%%%%%%%%
+% Everything after this point will eventually be relocated
+%
+
+function Xtoggle_flatten(src, data)
 
   global fig_handles; % <-- is this (and other similar lines) needed?
 
@@ -630,86 +120,11 @@ function toggle_flatten(src, data)
 
 end % function
 
-function create_figure(src, data, fig_no)
+function Xcreate_figureX(src, data, fig_no)
 
   global fig_handles
 
   switch fig_no
-    case 1 % The timeseries figure
-      global screensize
-      global gapsize
-      global period
-      global nprofile_bins
-
-      winsize_x  = screensize(3) - 2*gapsize;
-      winsize_y  = floor((screensize(4) - 3*gapsize)/2);
-      winpos_x   = gapsize;
-      winpos_y   = 2*gapsize + winsize_y;
-
-      fig_handles(fig_no) = figure("Name", "Timeseries", ...
-                                   "Position", [winpos_x, winpos_y, winsize_x, winsize_y], ...
-                                   "CloseRequestFcn", {@close_figure, fig_no});
-
-      if (isempty(period))
-        plot_profile_enable_state = "off";
-        plot_waterfall_enable_state = "off";
-      else
-        plot_profile_enable_state = "on";
-        plot_waterfall_enable_state = "on";
-      end % if
-
-      if (isempty(nprofile_bins))
-        plot_profile_enable_state = "off";
-      end % if
-
-      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-      % Set up the menu for the timeseries figure %
-      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-      % The Data menu
-      global m_data_save
-      m_data               = uimenu('label', '&Data');
-      m_data_open          = uimenu(m_data, 'label', '&Open', 'callback', @load_fan);
-      m_data_save          = uimenu(m_data, 'label', '&Save', 'callback', @save_fan);
-      m_data_saveas        = uimenu(m_data, 'label', 'Save &As', 'callback', @saveas_fan);
-      m_data_import_ts     = uimenu(m_data, 'label', '&Import timeseries', 'separator', 'on', 'callback', @import_timeseries);
-      m_data_samplerate    = uimenu(m_data, 'label', 'Set sampling &rate', 'callback', @set_sampling_rate);
-
-      % The Plot menu
-      m_plot               = create_plot_menu(fig_no);
-
-      % The FFT menu
-      global m_fft_window_hamming  m_fft_window_hanning  m_fft_zeromean  m_fft_zeropad  m_fft_visible
-      m_fft                = uimenu('label', 'FF&T');
-      m_fft_window         = uimenu(m_fft, 'label', '&Windowing function', 'accelerator', 'w');
-      m_fft_window_hamming = uimenu(m_fft_window, 'label', 'Ha&mming', 'accelerator', 'm', 'callback', @toggle_hamming);
-      m_fft_window_hanning = uimenu(m_fft_window, 'label', 'Ha&nning', 'accelerator', 'n', 'callback', @toggle_hanning);
-      m_fft_zeromean       = uimenu(m_fft, 'label', '&Zero-mean', 'accelerator', 'z', 'callback', @toggle_zeromean);
-      m_fft_zeropad        = uimenu(m_fft, 'label', '&Zero-pad', 'callback', @toggle_zeropad);
-      m_fft_visible        = uimenu(m_fft, 'label', 'Only &visible', 'accelerator', 'v', 'callback', @toggle_visible);
-      m_fft_plotfft        = uimenu(m_fft, 'label', 'Plot FFT', 'separator', 'on', 'accelerator', 't', 'callback', @plot_fft);
-      m_fft_plothrfs       = uimenu(m_fft, 'label', 'Plot HRFS', 'accelerator', 'h', 'callback', @plot_hrfs);
-      m_fft_plottdfs       = uimenu(m_fft, 'label', 'Plot 2DFS', 'accelerator', '2', 'callback', @plot_tdfs);
-
-      % The Breakpoints menu
-      global m_bp_apply
-      m_bp                 = uimenu('label', '&Breakpoints');
-      m_bp_add             = uimenu(m_bp, 'label', 'Add &breakpoints', 'accelerator', 'b', 'callback', @add_breakpoints);
-      m_bp_apply           = uimenu(m_bp, 'label', 'A&pply breakpoints', 'separator', 'on', ...
-                                          'callback', @toggle_flatten);
-
-      % The Profile menu
-      global m_profile_plot  m_profile_waterfall
-      m_profile            = uimenu('label', '&Profile');
-      m_profile_setperiod  = uimenu(m_profile, 'label', '&Set period', 'callback', @get_period_from_user);
-      m_profile_selperiod  = uimenu(m_profile, 'label', 'Se&lect period from pulsar', 'callback', @select_pulsarperiod);
-      m_profile_setnbins   = uimenu(m_profile, 'label', '&Set no. profile bins', 'callback', @get_nbins_from_user);
-      m_profile_plot       = uimenu(m_profile, 'label', '&Plot profile', 'separator', 'on', ...
-                                               'accelerator', 'p', 'callback', @plot_profile);
-      m_profile_waterfall  = uimenu(m_profile, 'label', 'Plot &waterfall', 'callback', @plot_waterfall);
-
-      % Set checks and enables correctly
-      update_timeseries_menu();
 
     case 2 % The FFT figure
       global screensize
@@ -796,7 +211,7 @@ function create_figure(src, data, fig_no)
       m_tdfs_analyse_delall  = uimenu(m_tdfs_analyse, 'label', 'Delete all filters', 'enable', 'off');
       m_tdfs_analyse_shiftDC = uimenu(m_tdfs_analyse, 'label', 'Shift DC', 'separator', 'on', ...
                                       'callback', {@click_shiftDC, fig_no});
-      m_tdfs_analyse_cplxenv = uimenu(m_tdfs_analyse, 'label', 'Plot complex envelopes', 'separator', 'on', 'callback', @plot_cplxenv);
+      m_tdfs_analyse_modenv = uimenu(m_tdfs_analyse, 'label', 'Plot complex envelopes', 'separator', 'on', 'callback', @plot_modenv);
 
     case 7 % The complex envelope = the result of E&S (2002) analysis
       fig_handles(fig_no) = figure("Name", "Complex Envelope", ...
@@ -812,7 +227,7 @@ function create_figure(src, data, fig_no)
 
 end % function
 
-function m_plot = create_plot_menu(fig_no, parent = 0)
+function Xm_plot = create_plot_menu(fig_no, parent = 0)
 
   global fig_handles
   figure(fig_handles(fig_no));
@@ -844,7 +259,7 @@ function m_plot = create_plot_menu(fig_no, parent = 0)
 
 end % function
 
-function m_colormap = create_colormap_menu(fig_no)
+function Xm_colormap = create_colormap_menu(fig_no, plot_no)
 
   global plot_params
   global fig_handles
@@ -862,28 +277,28 @@ function m_colormap = create_colormap_menu(fig_no)
   end % for
 
   uimenu(m_colormap, 'label', 'Invert', 'checked', on_off(plot_params(fig_no, 18)), ...
-                     'callback', {@toggle_invert, fig_no});
+                     'callback', {@toggle_plot_param, plot_no, "cinv"});
   uimenu(m_colormap, 'label', 'Set dynamic range limits', 'separator', 'on', ...
-                     'callback', {@scale_caxis, fig_no, 0, 0});
+                     'callback', {@scale_caxis, plot_no, 0, 0});
   uimenu(m_colormap, 'label', 'Increase Max by 10% of range', 'accelerator', '+', ...
-                     'callback', {@scale_caxis, fig_no, 0,  0.1});
+                     'callback', {@scale_caxis, plot_no, 0,  0.1});
   uimenu(m_colormap, 'label', 'Decrease Max by 10% of range', 'accelerator', '_', ...
-                     'callback', {@scale_caxis, fig_no, 0, -0.1});
+                     'callback', {@scale_caxis, plot_no, 0, -0.1});
   uimenu(m_colormap, 'label', 'Increase Min by 10% of range', 'accelerator', '=', ...
-                     'callback', {@scale_caxis, fig_no,  0.1, 0});
+                     'callback', {@scale_caxis, plot_no,  0.1, 0});
   uimenu(m_colormap, 'label', 'Decrease Min by 10% of range', 'accelerator', '-', ...
-                     'callback', {@scale_caxis, fig_no, -0.1, 0});
+                     'callback', {@scale_caxis, plot_no, -0.1, 0});
 
 end % function
 
-function update_plots(src, data)
+function Xupdate_plots(src, data)
 
   get_axes();
   replot();
 
 end % function
 
-function set_waterfall_plot_type(src, data, newvalue)
+function Xset_waterfall_plot_type(src, data, newvalue)
 
   global waterfall_plot_type
   global m_waterfall_colormap
@@ -905,7 +320,7 @@ function set_waterfall_plot_type(src, data, newvalue)
 
 end % function
 
-function set_axis(fig_no, axis_char, newmin = NaN, newmax = NaN)
+function Xset_axis(fig_no, axis_char, newmin = NaN, newmax = NaN)
 
   global plot_params
 
@@ -981,7 +396,7 @@ function set_axis(fig_no, axis_char, newmin = NaN, newmax = NaN)
 
 end % function
 
-function scale_caxis(src, data, fig_no, minfactor, maxfactor)
+function Xscale_caxis(src, data, fig_no, minfactor, maxfactor)
 
   if (all(~[minfactor, maxfactor])) % Putting in zeros for these parameters brings up a dialog box
 
@@ -1006,7 +421,7 @@ function scale_caxis(src, data, fig_no, minfactor, maxfactor)
 
 end % function
 
-function str = on_off(bool)
+function Xstr = on_off(bool)
 % Converts 1,0 to "on","off" respectively
   if (bool)
     str = "on";
@@ -1015,111 +430,7 @@ function str = on_off(bool)
   end % if
 end % function
 
-function close_figure(src, data, fig_no)
-
-  global fig_handles
-
-  if (fig_no == 1)
-
-    % Check if there are unsaved changes
-    if (~offer_to_save())
-      return
-    end % if
-
-    % Close all (open) figures attached to this instance of FANSO
-    other_figures = logical(fig_handles);
-    other_figures(1) = false;
-    other_handles = fig_handles(other_figures);
-    delete(other_handles);
-    fig_handles(2:end) = 0;
-
-    % Get rid of all global variables
-    clear -global
-
-    % Close this figure
-    delete(src);
-
-  else
-
-    % Close just this figure and set the handle to 0
-    delete(src);
-    fig_handles(fig_no) = 0;
-
-  end % if
-
-end % function
-
-function plot_timeseries(src, data)
-
-  global fig_handles
-
-  global filename
-
-  global timeseries
-  global flattened
-  global dt
-
-  global breakpoints
-  global apply_bps
-
-  % Switch to/Create timeseries figure and keep track of the view window
-  fig_no = 1;
-  first_time = (fig_handles(fig_no) == 0);
-
-  if (first_time)
-    create_figure(0,0,fig_no);
-  end % if
-
-  figure(fig_handles(fig_no));
-
-  % Calculate the values for the timeseries abscissa
-  N = length(timeseries);
-  t = [0:(N-1)]' * dt;
-
-  % Plot different things depending on whether the breakpoints are
-  % to be "applied" or not (i.e. whether the timeseries has been flattened).
-  if (apply_bps)
-    flatten();
-    plot(t, flattened, 'b');
-  else
-    if(~isempty(breakpoints))
-      global ms
-      global cs
-
-      % Prepare vertical lines for breakpoint plotting
-      bp_xs = [1;1] * breakpoints;
-      ymin = min(timeseries);
-      ymax = max(timeseries);
-      bp_ys = repmat([ymin;ymax],size(breakpoints));
-
-      % Prepare the detrend lines for plotting
-      model_xs = [0, breakpoints;
-                  breakpoints, t(end)];
-      m_mat = repmat(ms',2,1);
-      c_mat = repmat(cs',2,1);
-      model_ys = model_xs .* m_mat + c_mat;
-
-      % Plot the original timeseries, breakpoints, and detrend lines
-      plot(t, timeseries, 'b', ...
-           bp_xs, bp_ys, 'r', 'linewidth', 2.0, ...
-           model_xs, model_ys, 'g', 'linewidth', 2.0);
-    else
-      % Plot the timeseries!
-      plot(t, timeseries, 'b');
-    end % if
-  end % if
-  %figure(fig_handles(fig_no)); % <-- Possibly redundant, remains to be checked
-  xlabel('Time (s)');
-  ylabel('Timeseries values');
-
-  % Get/Set axis limits
-  if (~set_axes(fig_no))
-    get_axes(0,0,fig_no);
-  end % if
-
-end % function
-
-function plot_fft(src, data)
+function Xplot_fft(src, data)
 
   global fig_handles
 
@@ -1177,7 +488,7 @@ function plot_fft(src, data)
 
 end % function
 
-function select_period(src, data)
+function Xselect_period(src, data)
 
   global fig_handles
   figure(fig_handles(2));
@@ -1202,7 +513,7 @@ function select_period(src, data)
 
 end % function
 
-function plot_profile(src, data)
+function Xplot_profile(src, data)
 
   global fig_handles
 
@@ -1266,7 +577,7 @@ function plot_profile(src, data)
 
 end % function
 
-function plot_hrfs(src, data)
+function Xplot_hrfs(src, data)
 
   global fig_handles
 
@@ -1339,7 +650,7 @@ function plot_hrfs(src, data)
 
 end % function
 
-function plot_waterfall(src, data)
+function Xplot_waterfall(src, data)
 
   global fig_handles
 
@@ -1412,7 +723,7 @@ function plot_waterfall(src, data)
 
 end % function
 
-function plot_tdfs(src, data)
+function Xplot_tdfs(src, data)
 
   global fig_handles
   global plot_params
@@ -1559,7 +870,7 @@ function plot_tdfs(src, data)
 
 end % function
 
-function plot_cplxenv(src, data, fig_no)
+function Xplot_modenv(src, data, fig_no)
 
   global fig_handles
   global plot_params
@@ -1625,14 +936,10 @@ function plot_cplxenv(src, data, fig_no)
   SNR = S(1,1) / (trace(S) - S(1,1)); % <-- Not sure if this is the correct way to do it...
 
   set(fig_handles(fig_no), "Name", sprintf('Complex Envelope: \"SNR?\" = %f', SNR));
-  for n=1:10
-    S(n,n)
-  end % for
-  fflush(stdout);
 
 end % function
 
-function apply_shift_DC()
+function Xapply_shift_DC()
 
   global shift_DC
   global pos_relative
@@ -1659,7 +966,7 @@ function apply_shift_DC()
 
 end % function
 
-function apply_tdfs_filters()
+function Xapply_tdfs_filters()
 
   global tdfs
   global filters
@@ -1698,7 +1005,7 @@ function apply_tdfs_filters()
 
 end % function
 
-function reshape_timeseries_into_grid(do_visible = true)
+function Xreshape_timeseries_into_grid(do_visible = true)
 
   global timeseries
   global flattened
@@ -1737,7 +1044,7 @@ function reshape_timeseries_into_grid(do_visible = true)
 
 end % function
 
-function clear_mask(src, data)
+function Xclear_mask(src, data)
 
   global profile_mask
   global breakpoint_mask
@@ -1755,7 +1062,7 @@ function clear_mask(src, data)
 
 end % function
 
-function select_mask(src, data)
+function Xselect_mask(src, data)
 
   global profile_mask
 
@@ -1778,7 +1085,7 @@ function select_mask(src, data)
 
 end % function
 
-function apply_profile_mask()
+function Xapply_profile_mask()
 
   global timeseries
   global profile_mask
@@ -1802,7 +1109,7 @@ function apply_profile_mask()
 
 end % function
 
-function calc_fft()
+function Xcalc_fft()
 
   global fig_handles
 
@@ -1872,7 +1179,7 @@ function calc_fft()
 
 end % function
 
-function calc_profile()
+function Xcalc_profile()
 
   global dt
   global timeseries
@@ -1900,7 +1207,7 @@ function calc_profile()
 
 end % function
 
-function set_period(newperiod)
+function Xset_period(newperiod)
 
   global period
 
@@ -1921,7 +1228,7 @@ function set_period(newperiod)
 
 end % function
 
-function set_nbins(newnbins)
+function Xset_nbins(newnbins)
 
   global nprofile_bins
 
@@ -1941,7 +1248,7 @@ function set_nbins(newnbins)
 
 end % function
 
-function update_timeseries_menu()
+function Xupdate_timeseries_menu()
 
   global period
   global nprofile_bins
@@ -1976,7 +1283,7 @@ function update_timeseries_menu()
 
 end % function
 
-function get_period_from_user(src, data)
+function Xget_period_from_user(src, data)
 
   global period
 
@@ -1987,7 +1294,7 @@ function get_period_from_user(src, data)
 
 end % function
 
-function get_nbins_from_user(src, data)
+function Xget_nbins_from_user(src, data)
 
   global nprofile_bins
 
@@ -2017,7 +1324,7 @@ function get_nbins_from_user(src, data)
 
 end % function
 
-function flatten()
+function Xflatten()
 
   global dt
   global timeseries
@@ -2057,7 +1364,7 @@ function flatten()
 
 end % function
 
-function set_fft_plot_type(src, data, fig_no, newexp)
+function Xset_fft_plot_type(src, data, fig_no, newexp)
 
   global plot_params
 
@@ -2092,7 +1399,7 @@ function set_fft_plot_type(src, data, fig_no, newexp)
 
 end % function
 
-function replot(fig_nos = nan)
+function Xreplot(fig_nos = nan)
 
   global fig_handles
   global fig_functions
@@ -2117,25 +1424,7 @@ function replot(fig_nos = nan)
 
 end % function
 
-function load_periods()
-
-  global pulsarperiods
-
-  f = fopen('periods.dat');
-
-  % First, count the lines
-  nlines = fskipl(f, Inf);
-  frewind(f);
-
-  % Now read them in
-  pulsarperiods = cell(nlines, 2);
-  for n = 1:nlines
-    [pulsarperiods{n,1}, pulsarperiods{n,2}] = fscanf(f, '%s %f', "C");
-  end % for
-
-end % function
-
-function select_pulsarperiod(src, data)
+function Xselect_pulsarperiod(src, data)
 
   global pulsarperiods
   global period
@@ -2149,7 +1438,7 @@ function select_pulsarperiod(src, data)
 
 end % function
 
-function get_axes(src, data, fig_nos = nan)
+function Xget_axes(src, data, fig_nos = nan)
 
   global plot_params
   global fig_handles
@@ -2207,7 +1496,7 @@ function get_axes(src, data, fig_nos = nan)
 
 end % function
 
-function success = set_axes(fig_no)
+function Xsuccess = set_axes(fig_no)
 
   global plot_params
   global fig_handles
@@ -2256,7 +1545,7 @@ function success = set_axes(fig_no)
 
 end % function
 
-function apply_colormap(fig_no)
+function Xapply_colormap(fig_no)
 
   global plot_params
   global fig_handles
@@ -2281,7 +1570,7 @@ function apply_colormap(fig_no)
 
 end % function
 
-function set_colormap_type(src, data, fig_no, newtype)
+function Xset_colormap_type(src, data, fig_no, newtype)
 
   global plot_params
 
@@ -2298,7 +1587,7 @@ function set_colormap_type(src, data, fig_no, newtype)
 
 end % function
 
-function click_p2p3(src, data, fig_no)
+function Xclick_p2p3(src, data, fig_no)
 
   global fig_handles
   global quantise
@@ -2319,7 +1608,7 @@ function click_p2p3(src, data, fig_no)
 
 end % function
 
-function collect_p2p3_click(src, button)
+function Xcollect_p2p3_click(src, button)
 
   global period
   global P2hat
@@ -2351,7 +1640,7 @@ function collect_p2p3_click(src, button)
 
 end % function
 
-function create_filter(src, data, fig_no, hor_or_vert)
+function Xcreate_filter(src, data, fig_no, hor_or_vert)
 % hor_or_vert should be "horizontal" or "vertical"
 
   global fig_handles
@@ -2381,7 +1670,7 @@ function create_filter(src, data, fig_no, hor_or_vert)
 
 end % function
 
-function collect_filter_click(src, button, click_no, hor_or_vert)
+function Xcollect_filter_click(src, button, click_no, hor_or_vert)
 
   global quantise
   global new_filter
@@ -2431,7 +1720,7 @@ function collect_filter_click(src, button, click_no, hor_or_vert)
 
 end % function
 
-function collect_quantise_keypress(src, evt, newtitle_stem)
+function Xcollect_quantise_keypress(src, evt, newtitle_stem)
 
   if (evt.Character == 'q')
 
@@ -2444,7 +1733,7 @@ function collect_quantise_keypress(src, evt, newtitle_stem)
 
 end % function
 
-function pos = get_curr_pos(h, quantised)
+function Xpos = get_curr_pos(h, quantised)
 
   point = get(h, "currentpoint");
   point = point(1,1:2);
@@ -2474,7 +1763,7 @@ function pos = get_curr_pos(h, quantised)
 
 end % function
 
-function delete_filter(src, data, fig_no)
+function Xdelete_filter(src, data, fig_no)
 
   global fig_handles
   global orig_windowbuttondownfcn_delfilter
@@ -2494,7 +1783,7 @@ function delete_filter(src, data, fig_no)
 
 end % function
 
-function collect_deletefilter_click(src, button)
+function Xcollect_deletefilter_click(src, button)
 
   global filters
   global shift_DC
@@ -2532,7 +1821,7 @@ function collect_deletefilter_click(src, button)
 
 end % function
 
-function keypress_deletefilter(src, evt)
+function Xkeypress_deletefilter(src, evt)
 
   global filters
   global orig_windowbuttondownfcn_delfilter
@@ -2556,7 +1845,7 @@ function keypress_deletefilter(src, evt)
 
 end % function
 
-function click_shiftDC(src, data, fig_no)
+function Xclick_shiftDC(src, data, fig_no)
 
   global fig_handles
   global orig_windowbuttondownfcn_shiftDC
@@ -2572,7 +1861,7 @@ function click_shiftDC(src, data, fig_no)
 
 end % function
 
-function buttondown_shiftDC(src, button)
+function Xbuttondown_shiftDC(src, button)
 
   switch button
     case 1 % Left button = initiate drag
@@ -2595,7 +1884,7 @@ function buttondown_shiftDC(src, button)
   
 end % function
 
-function buttonmotion_shiftDC(src, button)
+function Xbuttonmotion_shiftDC(src, button)
 
   global pos_start
   global pos_relative % <-- this global variable will get used in plot_tdfs()
@@ -2613,7 +1902,7 @@ function buttonmotion_shiftDC(src, button)
 
 end % function
 
-function buttonup_shiftDC(src, button)
+function Xbuttonup_shiftDC(src, button)
 
   global pos_relative
   global shift_DC
