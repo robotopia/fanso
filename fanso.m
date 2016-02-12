@@ -64,7 +64,7 @@ function fanso(init_filename)
 
   % Load initial file, if given
   if (nargin == 1)
-    load_data("", init_filename);
+    load_data([pwd(), "/"], init_filename);
 
     % Draw the main (=timeseries) window
     create_figure("timeseries");

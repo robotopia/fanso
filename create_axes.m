@@ -15,7 +15,6 @@ function a = create_axes(plot_name)
   if (isempty(a))
     a = axes();
     figures.(plot_name).ax_handle = a;
-
   end % if
 
 end % function

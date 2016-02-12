@@ -70,6 +70,8 @@ function new_fan()
   delete(a);
   set(f, "name", "timeseries");
 
+  figures.timeseries.ax_handle = [];
+
   % Set enables on menu items
   global m_data_save m_data_saveas m_data_export;
   set([m_data_save, m_data_saveas, m_data_export], "enable", "off");
@@ -129,14 +131,17 @@ function save_fan()
 end % function
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-function saveas_fan()
+function cont = saveas_fan()
 
   global filepath;
   global filename;
+  cont = true;
 
   % Open up a Save File dialog box
   if (filepath && filename)
     [savefile, savepath] = uiputfile([filepath, filename]);
+  elseif (filename)
+    [savefile, savepath] = uiputfile(filename);
   else
     [savefile, savepath] = uiputfile({"*.fan", "FANSO file"});
   end % if
@@ -149,6 +154,8 @@ function saveas_fan()
     % Change which menu items are enabled
     global m_data_save
     set(m_data_save, "enable", "on");
+  else
+    cont = false;
   end % if
 
 end % function
@@ -291,29 +298,28 @@ function cont = offer_to_save()
 % or user chooses either Yes or No from the
 % dialog box. Returns false if they choose Cancel.
 
-  global filepath;
   global filename;
-% SOMETHING WRONG IN THIS FunCTION.
-% load file
-% make change
-% choose New
-% it goes to "save as" instead of "save"
-
   global unsaved_changes;
+
   cont = true;
 
   if (unsaved_changes)
     dlg_answer = questdlg("Would you like to save your changes?", "Save changes?");
 
     switch dlg_answer
+
       case "Yes"
-        if (filename && filepath)
+        if (filename)
           save_fan();
         else
-          saveas_fan();
-        end
+          if (~saveas_fan())
+            cont = false;
+          end % if
+        end % if
+
       case "Cancel"
         cont = false;
+
     end % switch
   end % if
 
