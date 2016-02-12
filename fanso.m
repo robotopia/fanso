@@ -228,104 +228,6 @@ function Xscale_caxis(src, data, fig_no, minfactor, maxfactor)
 
 end % function
 
-function Xstr = on_off(bool)
-% Converts 1,0 to "on","off" respectively
-  if (bool)
-    str = "on";
-  else
-    str = "off";
-  end % if
-end % function
-
-function Xselect_period(src, data)
-
-  global fig_handles
-  figure(fig_handles(2));
-
-  global period;
-
-  title("Click on a harmonic of the desired frequency");
-
-  [x, y, button] = ginput(1);
-
-  % Get the harmonic number via a dialog box
-  cstr = inputdlg({"Harmonic number of selected point:"}, "Harmonic", 1, {"1"});
-  if (~isempty(cstr))
-    nharm = str2num(cstr{1});
-    newperiod = nharm / x;
-    set_period(newperiod);
-  end % if
-
-  % Reset title
-  figure(fig_handles(2));
-  title("");
-
-end % function
-
-function Xplot_profile(src, data)
-
-  global fig_handles
-
-  global profile
-  global nprofile_bins
-  global period
-  global profile_mask
-
-  if (isempty(period))
-    errordlg('The period has not been set');
-    return
-  end % if
-
-  if (isempty(nprofile_bins))
-    errordlg('The number of profile bins has not been set');
-    return
-  end % if
-
-  % Switch to/Create FFT figure and keep track of the view window
-  fig_no = 3;
-  first_time = (fig_handles(fig_no) == 0);
-
-  if (first_time)
-    create_figure(0,0,fig_no);
-  end % if
-
-  h = fig_handles(fig_no);
-
-  % Calculate profile
-  calc_profile();
-
-  % Plot it up!
-  figure(h);
-  hold off;
-  dphase = 1/nprofile_bins;
-  phase = [0:dphase:(1-dphase/2)]; % Ensure that there are the correct number of bins
-  plot(phase, profile);
-  xlabel('Phase');
-  ylabel('Flux (arbitrary units)');
-  profile_title = sprintf('Period = %.12f s;    No. of bins = %d', period, nprofile_bins);
-  title(profile_title);
-
-  % Get/Set axis limits
-  if (~set_axes(fig_no))
-    get_axes(0,0,fig_no);
-  end % if
-
-  % Shade the masked area
-  figure(h);
-  ax = axis();
-  ymin = ax(3);
-  ymax = ax(4);
-  hold on;
-  mygreen = [0.5,1.0,0.5];
-  if (profile_mask(1) <= profile_mask(2))
-    area(profile_mask, [ymax, ymax], ymin, "FaceColor", mygreen, "linewidth", 0);
-  else
-    area([0,profile_mask(2)], [ymax,ymax], ymin, "FaceColor", mygreen, "linewidth", 0);
-    area([profile_mask(1),1], [ymax,ymax], ymin, "FaceColor", mygreen, "linewidth", 0);
-  end % if
-
-end % function
-
 function Xplot_hrfs(src, data)
 
   global fig_handles
@@ -858,55 +760,6 @@ function Xapply_profile_mask()
 
 end % function
 
-function Xcalc_profile()
-
-  global dt
-  global timeseries
-  global flattened
-  global nprofile_bins
-  global profile
-
-  global apply_bps
-
-  global period
-
-  % Use original or flattened, accordingly
-  if (apply_bps)
-    to_be_folded = flattened;
-  else
-    to_be_folded = timeseries;
-  end % if
-
-  % Calculate the values for the profile abscissa (=phase)
-  N = length(to_be_folded);
-  t = ([1:N]' - 0.5) * dt; % -0.5 is to avoid some of the more common computer precision errors
-  phase = mod(t,period)/period;
-  accum_subs = floor(phase * nprofile_bins) + 1;
-  profile = accumarray(accum_subs, to_be_folded, [nprofile_bins,1], @mean);
-
-end % function
-
-function Xset_period(newperiod)
-
-  global period
-
-  if (period ~= newperiod)
-    set_unsaved_changes(true);
-  end % if
-
-  % Change period
-  period = newperiod;
-
-  % Update the menu
-  update_timeseries_menu();
-
-  % Update the relevant plots
-  fig_nos = [3,4,5];
-  get_axes(0,0,fig_nos);
-  replot(fig_nos);
-
-end % function
-
 function Xset_nbins(newnbins)
 
   global nprofile_bins
@@ -924,36 +777,6 @@ function Xset_nbins(newnbins)
   % Update the plots
   get_axes(0,0,3);
   replot(3);
-
-end % function
-
-function Xget_nbins_from_user(src, data)
-
-  global nprofile_bins
-
-  cstr = inputdlg({"Enter number of bins:"}, "Profile bins", 1, {num2str(nprofile_bins)});
-
-  % Check if user clicked cancel
-  if (isempty(cstr))
-    return;
-  end % if
-
-  % Convert the value to an appropriate number
-  try
-    input = str2num(cstr{1});
-  catch
-    errordlg("Unable to convert input to numeric type");
-    return
-  end % try_catch
-
-  % Check if they put in something other than an integer
-  if (mod(input,1) ~= 0)
-    input = round(input);
-    errordlg(sprintf('Rounding %s to %d', cstr, input));
-  end % if
-
-  % Update the value!
-  set_nbins(input);
 
 end % function
 
@@ -1014,20 +837,6 @@ function Xreplot(fig_nos = nan)
     fig_functions{fig_no}();
 
   end % for
-
-end % function
-
-function Xselect_pulsarperiod(src, data)
-
-  global pulsarperiods
-  global period
-
-  names = pulsarperiods(:,1);
-
-  [sel, ok] = listdlg("ListString", names, "SelectionMode", "Single", "Name", "Select pulsar");
-  if (ok)
-    set_period(pulsarperiods{sel,2});
-  end % if
 
 end % function
 

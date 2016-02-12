@@ -386,7 +386,7 @@ function keypressfcn(src, evt)
   end % if
 
   %if (any(strcmp(evt.Key, {"f1", "f2", "f3", "f4", "f5", "f6", "f7"})))
-  if (any(strcmp(evt.Key, {"f1", "f2"})))
+  if (any(strcmp(evt.Key, {"f1", "f2", "f3"})))
     plot_no    = str2num(evt.Key(2));
     plot_name  = plot_names{plot_no};
     if (isempty(figures.(plot_name).fig_handle))
@@ -410,12 +410,14 @@ function keypressfcn(src, evt)
               "F7 = plot modulation envelopes",
               "0 = toggle zero-padding",
               "^ = toggle show peaks",
-              "b = toggle breakpoint edit mode",
+              "b = change number of profile bins",
+              "B = toggle breakpoint edit mode",
               "f = flatten timeseries",
               "h = display this help",
               "l = toggle logarithmic plot for current figure",
               "m = toggle Hamming window",
               "n = toggle Hanning window",
+              "o = change folding period by clicking on FFT",
               "p = change folding period manually",
               "P = change folding period by selecting pulsar",
               "s = change sampling rate",
@@ -441,6 +443,33 @@ function keypressfcn(src, evt)
       figures.tdfs.drawfcn();
 
     case 'b'
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+      % Change number of profile bins manually %
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+      cstr = inputdlg({"Enter number of bins to use in profile:"}, "Profile bins", 1, {num2str(analysis.nprofile_bins)});
+      if (~isempty(cstr)) % = OK was pushed
+        % Convert the input value to a number
+        try
+          input = str2num(cstr{1});
+        catch
+          errordlg("Unable to convert input to numeric type");
+          return
+        end % try_catch
+
+        % Check if they put in something other than an integer
+        if (mod(input,1) ~= 0)
+          input = round(input);
+          errordlg(sprintf("Rounding %s to %d", cstr, input));
+        end % if
+
+        % Update the value!
+        set_analysis_value("nprofile_bins", input);
+
+        % Update just the profile figure
+        figures.profile.drawfcn();
+      end % if
+
+    case 'B'
       %%%%%%%%%%%%%%%%%%%
       % Add breakpoints %
       %%%%%%%%%%%%%%%%%%%
@@ -559,18 +588,23 @@ function keypressfcn(src, evt)
       toggle_analysis_value("apply_hanning");
       figures.fft.drawfcn();
 
+    case 'o'
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+      % Change period by FFT click %
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+      if (~isempty(figures.fft.fig_handle))
+        analysed.fft_title = get(get(figures.fft.ax_handle, "title"), "string"); % Save the old title
+        title(figures.fft.ax_handle, "Click on a harmonic of the desired frequency\n(right button to cancel)");
+        set(figures.fft.fig_handle, "windowbuttondownfcn", @select_pulsar_click);
+      end % if
+
     case 'p'
       %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
       % Change folding period manually %
       %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
       cstr = inputdlg({"Enter period in seconds:"}, "Period", 1, {num2str(analysis.period, 15)});
       if (~isempty(cstr)) % = OK was pushed
-        set_analysis_value("period", str2num(cstr{1}));
-
-        % Update all figures (they will all be affected)
-        for n = 1:length(plot_names)
-          figures.(plot_names{n}).drawfcn();
-        end % for
+        set_period(str2num(cstr{1}));
       end % if
 
     case 'P'
@@ -582,12 +616,7 @@ function keypressfcn(src, evt)
       pulsarnames = fieldnames(pulsars);
       [sel, ok] = listdlg("ListString", pulsarnames, "SelectionMode", "Single", "Name", "Select pulsar");
       if (ok)
-        set_analysis_value("period", pulsars.(pulsarnames{sel}).period);
-
-        % Update all figures (they will all be affected)
-        for n = 1:length(plot_names)
-          figures.(plot_names{n}).drawfcn();
-        end % for
+        set_period(pulsars.(pulsarnames{sel}).period);
       end % if
 
     case 'v'
@@ -680,7 +709,7 @@ function set_analysis_value(name, value)
 
   global analysis;
 
-  if (analysis.(name) ~= value)
+  if (~isequal(analysis.(name), value))
     analysis.(name) = value;
     set_unsaved_changes(true);
   end % if
@@ -724,11 +753,56 @@ end % function
 
 function add_breakpoint(x)
   global analysis;
+
   analysis.breakpoints = union(analysis.breakpoints, x); % <-- add a breakpoint
 end % function
 
 function remove_breakpoint(x)
   global analysis;
+
   [dummy, nearest_idx] = min(abs(analysis.breakpoints - x));
   analysis.breakpoints = setdiff(analysis.breakpoints, analysis.breakpoints(nearest_idx)); % <-- remove a breakpoint
+end % function
+
+function select_pulsar_click(src, button)
+
+  global figures;
+  global analysed;
+
+  if (button == 1) % Left button = convert clicked frequency to period
+    cstr = inputdlg({"Harmonic number of selected point:"}, "Harmonic", 1, {"1"});
+    if (~isempty(cstr))
+
+      % Get where the user clicked
+      point = get(figures.fft.ax_handle, "currentpoint");
+      nharm = str2num(cstr{1});
+      newperiod = nharm / point(1,1);
+      set_period(newperiod);
+
+    end % if
+  end % if
+
+  if (any(button == [1,3])) % Reset callback function as long as either the left or right buttons were pushed
+    title(figures.fft.ax_handle, analysed.fft_title);
+    set(figures.fft.fig_handle, "windowbuttondownfcn", []);
+    analysed = rmfield(analysed, "fft_title");
+  end % if
+
+end % function
+
+function set_period(newperiod)
+
+  global figures;
+
+  set_analysis_value("period", newperiod);
+
+  % Update all figures (they will all be affected)
+  plot_names = fieldnames(figures);
+  for n = 1:length(plot_names)
+    figures.(plot_names{n}).drawfcn();
+  end % for
+
+  % Update the title on the profile plot
+  title_profile();
+
 end % function

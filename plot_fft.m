@@ -39,26 +39,30 @@ function plot_fft()
   ylabel(a, ylabel_text);
 
   % Create an informative title
-  if (analysis.only_visible)
-    tax = plots.timeseries.axis;
-    xlo = num2str(max([tax(1), 0]));
-    xhi = num2str(min([tax(2), analysed.t(end)]));
+  if (isfield(analysed, "fft_title"))
+    fft_title = analysed.fft_title;
   else
-    xlo = "0";
-    xhi = num2str(analysed.N * analysed.dt);
-  end % if
-  fft_title = ["FFT of timeseries between ", xlo, " and ", xhi, " ", data.timeunits];
-  if (analysis.apply_hamming)
-    fft_title = [fft_title, "\nHamming window applied"];
-  end % if
-  if (analysis.apply_hanning)
-    fft_title = [fft_title, "\nHanning window applied"];
-  end % if
-  if (analysis.zeromean)
-    fft_title = [fft_title, "\nZero-meaning timeseries"];
-  end % if
-  if (analysis.zeropad)
-    fft_title = [fft_title, "\nZero-padding timeseries"];
+    if (analysis.only_visible)
+      tax = plots.timeseries.axis;
+      xlo = num2str(max([tax(1), 0]));
+      xhi = num2str(min([tax(2), analysed.t(end)]));
+    else
+      xlo = "0";
+      xhi = num2str(analysed.N * analysed.dt);
+    end % if
+    fft_title = ["FFT of timeseries between ", xlo, " and ", xhi, " ", data.timeunits];
+    if (analysis.apply_hamming)
+      fft_title = [fft_title, "\nHamming window applied"];
+    end % if
+    if (analysis.apply_hanning)
+      fft_title = [fft_title, "\nHanning window applied"];
+    end % if
+    if (analysis.zeromean)
+      fft_title = [fft_title, "\nZero-meaning timeseries"];
+    end % if
+    if (analysis.zeropad)
+      fft_title = [fft_title, "\nZero-padding timeseries"];
+    end % if
   end % if
   title(a, fft_title);
 
