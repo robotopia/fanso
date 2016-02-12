@@ -293,6 +293,11 @@ function cont = offer_to_save()
 
   global filepath;
   global filename;
+% SOMETHING WRONG IN THIS FunCTION.
+% load file
+% make change
+% choose New
+% it goes to "save as" instead of "save"
 
   global unsaved_changes;
   cont = true;
@@ -411,6 +416,8 @@ function keypressfcn(src, evt)
               "l = toggle logarithmic plot for current figure",
               "m = toggle Hamming window",
               "n = toggle Hanning window",
+              "p = change folding period manually",
+              "P = change folding period by selecting pulsar",
               "s = change sampling rate",
               "v = toggle only analyse visible part of timeseries",
               "z = toggle zero-meaning"},
@@ -552,6 +559,37 @@ function keypressfcn(src, evt)
       toggle_analysis_value("apply_hanning");
       figures.fft.drawfcn();
 
+    case 'p'
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+      % Change folding period manually %
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+      cstr = inputdlg({"Enter period in seconds:"}, "Period", 1, {num2str(analysis.period, 15)});
+      if (~isempty(cstr)) % = OK was pushed
+        set_analysis_value("period", str2num(cstr{1}));
+
+        % Update all figures (they will all be affected)
+        for n = 1:length(plot_names)
+          figures.(plot_names{n}).drawfcn();
+        end % for
+      end % if
+
+    case 'P'
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+      % Change folding period by selecting pulsar from list %
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+      global pulsars
+
+      pulsarnames = fieldnames(pulsars);
+      [sel, ok] = listdlg("ListString", pulsarnames, "SelectionMode", "Single", "Name", "Select pulsar");
+      if (ok)
+        set_analysis_value("period", pulsars.(pulsarnames{sel}).period);
+
+        % Update all figures (they will all be affected)
+        for n = 1:length(plot_names)
+          figures.(plot_names{n}).drawfcn();
+        end % for
+      end % if
+
     case 'v'
       %%%%%%%%%%%%%%%%%%%%%%%
       % Toggle only_visible %
@@ -581,6 +619,9 @@ function keypressfcn(src, evt)
           scale = new_samplingrate / data.samplingrate;
 
           % Update values
+          if (~isempty(analysis.breakpoints))
+            analysis.breakpoints *= data.samplingrate / new_samplingrate;
+          end % if
           data.samplingrate = new_samplingrate;
           analysed.dt = 1/data.samplingrate;                 % The time between adjacent samples
           analysed.t  = [0:(analysed.N-1)]' * analysed.dt;   % The time axis
@@ -635,12 +676,22 @@ function save_views()
 
 end % function
 
+function set_analysis_value(name, value)
+
+  global analysis;
+
+  if (analysis.(name) ~= value)
+    analysis.(name) = value;
+    set_unsaved_changes(true);
+  end % if
+
+end % function
+
 function toggle_analysis_value(name)
 
   global analysis;
 
-  analysis.(name) = ~analysis.(name);
-  set_unsaved_changes(true);
+  set_analysis_value(name, ~analysis.(name));
 
 end % function
 

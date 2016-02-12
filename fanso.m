@@ -237,64 +237,6 @@ function Xstr = on_off(bool)
   end % if
 end % function
 
-function Xplot_fft(src, data)
-
-  global fig_handles
-
-  global spectrum_freqs
-  global spectrum_vals
-
-  global plot_params
-
-  % Switch to/Create FFT figure and keep track of the view window
-  fig_no = 2;
-  first_time = (fig_handles(fig_no) == 0);
-
-  if (first_time)
-    create_figure(0,0,fig_no);
-  end % if
-
-  figure(fig_handles(fig_no));
-
-  % Calculate the FFT
-  calc_fft();
-  to_be_plotted = abs(spectrum_vals);
-  ylabel_text   = 'Amplitude';
-
-  % Are we plotting power instead?
-  if (plot_params(fig_no, 14) == 2)
-    to_be_plotted .^= 2;
-    ylabel_text = 'Power';
-  end % if
-
-  % Set plot function according to whether log plots are requested
-  switch [plot_params(fig_no, 9:10)]
-    case [0,0]
-      plot_fcn = @plot;
-    case [1,0]
-      plot_fcn = @semilogx;
-    case [0,1]
-      plot_fcn = @semilogy;
-    case [1,1]
-      plot_fcn = @loglog;
-    otherwise
-      errordlg("Non-logical values for plot log type");
-      return
-  end % switch
-
-  % Plot up the FFT
-  figure(fig_handles(fig_no));
-  plot_fcn(spectrum_freqs, to_be_plotted, 'b');
-  xlabel('Frequency (Hz)');
-  ylabel(ylabel_text);
-
-  % Get/Set axis limits
-  if (~set_axes(fig_no))
-    get_axes(0,0,fig_no);
-  end % if
-
-end % function
-
 function Xselect_period(src, data)
 
   global fig_handles
@@ -916,76 +858,6 @@ function Xapply_profile_mask()
 
 end % function
 
-function Xcalc_fft()
-
-  global fig_handles
-
-  global timeseries
-  global flattened
-  global dt
-  global period
-  global plot_params
-
-  global spectrum_freqs
-  global spectrum_vals
-
-  global zeromean
-  global zeropad
-  global only_visible
-  global apply_hamming
-  global apply_hanning
-  global apply_bps
-
-  % Are we getting the FFT of the original timeseries or the flattened timeseries?
-  if (apply_bps)
-    to_be_ffted = flattened;
-  else
-    to_be_ffted = timeseries;
-  end % if
-
-  % Are we processing just the visible part?
-  if (only_visible)
-    xax = plot_params(1,1:2);
-    min_idx = max([floor(xax(1)/dt)+1, 1]);
-    max_idx = min([floor(xax(2)/dt)+1, length(timeseries)]); % <-- Check this
-    to_be_ffted = to_be_ffted([min_idx:max_idx]);
-  end % if
-
-  % Apply zeromean
-  if (zeromean)
-    to_be_ffted = to_be_ffted - mean(to_be_ffted);
-  end % if
-
-  % Apply zero-pad
-  if (zeropad)
-    n = length(to_be_ffted);
-    np = period / dt; % Number of bins per pulse
-    n_extra_zeros = round(ceil(n/np)*np) - n;
-    to_be_ffted = [to_be_ffted; zeros(n_extra_zeros,1)];
-  end % if
-
-  % Get the length of the timeseries to be FFT'd
-  n  = length(to_be_ffted);
-
-  % Apply Hamming window
-  if (apply_hamming)
-    to_be_ffted = hamming(n) .* to_be_ffted;
-  end % if
-
-  % Apply Hanning window
-  if (apply_hanning)
-    to_be_ffted = hanning(n) .* to_be_ffted;
-  end % if
-
-  % Calculate the values...
-  % ...for the FFT abscissa...
-  df              = 1/(dt*n);
-  spectrum_freqs  = [0:(n-1)] * df;
-  % ...and the FFT ordinate (=power)...
-  spectrum_vals = fft(to_be_ffted);
-
-end % function
-
 function Xcalc_profile()
 
   global dt
@@ -1055,52 +927,6 @@ function Xset_nbins(newnbins)
 
 end % function
 
-function Xupdate_timeseries_menu()
-
-  global period
-  global nprofile_bins
-  global zeromean
-  global zeropad
-  global only_visible
-  global apply_hamming
-  global apply_hanning
-  global apply_bps
-  global filename
-  global filepath
-
-  global m_fft_window_hamming
-  global m_fft_window_hanning
-  global m_fft_zeromean
-  global m_fft_zeropad
-  global m_fft_visible
-  global m_bp_apply
-  global m_profile_plot
-  global m_profile_waterfall
-  global m_data_save
-
-  set(m_fft_window_hamming, "checked", on_off(apply_hamming));
-  set(m_fft_window_hanning, "checked", on_off(apply_hanning));
-  set(m_fft_zeromean,       "checked", on_off(zeromean));
-  set(m_fft_zeropad,        "checked", on_off(zeropad));
-  set(m_fft_visible,        "checked", on_off(only_visible));
-  set(m_bp_apply,           "checked", on_off(apply_bps));
-  set(m_profile_plot,       "enable",  on_off(period && nprofile_bins));
-  set(m_profile_waterfall,  "enable",  on_off(period));
-  set(m_data_save,          "enable",  on_off(filename && filepath));
-
-end % function
-
-function Xget_period_from_user(src, data)
-
-  global period
-
-  cstr = inputdlg({"Enter period in seconds:"}, "Period", 1, {num2str(period, 15)});
-  if (~isempty(cstr))
-    set_period(str2num(cstr{1}));
-  end % if
-
-end % function
-
 function Xget_nbins_from_user(src, data)
 
   global nprofile_bins
@@ -1128,46 +954,6 @@ function Xget_nbins_from_user(src, data)
 
   % Update the value!
   set_nbins(input);
-
-end % function
-
-function Xflatten()
-
-  global dt
-  global timeseries
-  global flattened
-  global breakpoint_mask
-
-  global breakpoints
-  global ms  % The slopes of the model detrend lines
-  global cs  % The y-intercepts of the model detrend lines
-
-  if (isempty(breakpoints))
-    flattened = timeseries;
-  else
-    flattened = zeros(size(timeseries));
-  end % if
-
-  % Book-end the breakpoints with initial and final values
-  N = length(timeseries);
-  t = [0:(N-1)]' * dt;
-
-  bps = [t(1)-1, breakpoints, t(end)+1];
-
-  % Loop through the breakpoints and detrend each segment
-  ms = zeros(length(bps)-1, 1);
-  cs = zeros(length(bps)-1, 1);
-  for i = 1:(length(bps)-1)
-    flatten_idxs  = (t >= bps(i)) & (t < bps(i+1));
-    model_idxs    = flatten_idxs & breakpoint_mask;
-    fit           = polyfit(t(model_idxs), timeseries(model_idxs), 1);
-    ms(i)         = fit(1);
-    cs(i)         = fit(2);
-    y_orig        = timeseries(flatten_idxs);
-    x             = t(flatten_idxs);
-    flattened(flatten_idxs) ...
-                  = y_orig - (ms(i)*x + cs(i));
-  end % for
 
 end % function
 
