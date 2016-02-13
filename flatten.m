@@ -5,6 +5,9 @@ function flatten()
   global analysed;
 
   if (isempty(analysis.breakpoints))
+    analysed.flattened = data.timeseries;
+    analysed.ms = [];
+    analysed.cs = [];
     return
   end % if
 

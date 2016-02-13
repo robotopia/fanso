@@ -420,6 +420,7 @@ function keypressfcn(src, evt)
               "B = toggle breakpoint edit mode",
               "f = flatten timeseries",
               "h = display this help",
+              "k = select profile mask",
               "l = toggle logarithmic plot for current figure",
               "m = toggle Hamming window",
               "n = toggle Hanning window",
@@ -500,23 +501,24 @@ function keypressfcn(src, evt)
         end % if
 
         % Clear the title
-        title(figures.timeseries.ax_handle, "");
+        analysed = rmfield(analysed, "timeseries_title");
+        set_title("timeseries");
 
         % Reset callback functions
         set(figures.timeseries.fig_handle, "windowbuttondownfcn", []);
 
       else % i.e. it is NOT in edit mode when b was pressed
 
-        analysed.old_apply_bps   = analysis.apply_bps;
-        analysed.old_breakpoints = analysis.breakpoints;
-        analysed.title           = "Left mouse button = add breakpoint; right = remove breakpoint";
+        analysed.old_apply_bps    = analysis.apply_bps;
+        analysed.old_breakpoints  = analysis.breakpoints;
+        analysed.timeseries_title = "Left mouse button = add breakpoint; right = remove breakpoint";
 
         if (analysis.apply_bps)
           analysis.apply_bps = 0; % i.e. turn it OFF (temporarily)
           figures.timeseries.drawfcn();
         end % if
 
-        title(figures.timeseries.ax_handle, analysed.title);
+        set_title("timeseries");
 
         set(figures.timeseries.fig_handle, "windowbuttondownfcn", @collect_breakpoint_clicks);
 
@@ -535,6 +537,11 @@ function keypressfcn(src, evt)
       for n = 1:length(plot_names)
         figures.(plot_names{n}).drawfcn();
       end % for
+
+    case 'k'
+      %%%%%%%%%%%%%%%%%%%%%%%
+      % Select profile mask %
+      %%%%%%%%%%%%%%%%%%%%%%%
 
     case 'l'
       %%%%%%%%%%%%%%%%%%%%%%%
@@ -752,7 +759,6 @@ function collect_breakpoint_clicks(src, button)
     action(point(1));
     flatten();
     figures.timeseries.drawfcn();
-    title(figures.timeseries.ax_handle, analysed.title);
   end % if
 
 end % function
@@ -809,6 +815,6 @@ function set_period(newperiod)
   end % for
 
   % Update the title on the profile plot
-  title_profile();
+  set_title("profile");
 
 end % function

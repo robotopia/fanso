@@ -41,7 +41,7 @@ function plot_profile()
   plot(a, phase, analysed.profile);
   xlabel(a, "Phase");
   ylabel(a, "Flux (UNITS)");
-  title_profile();
+  set_title(plot_name);
 
   % Get/Set axis limits
   if (~isempty(ax))

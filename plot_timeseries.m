@@ -24,7 +24,7 @@ function plot_timeseries()
 
   % Plot different things depending on whether the breakpoints are
   % to be "applied" or not (i.e. whether the timeseries has been flattened).
-  if (~isempty(analysis.breakpoints))
+  if (isempty(analysis.breakpoints))
     flatten();
   end % if
 
@@ -58,6 +58,7 @@ function plot_timeseries()
 
   xlabel(a, ["Time (", data.timeunits, ")"]);
   ylabel(a, "Flux (UNITS)"); % <-- add a field for this too
+  set_title(plot_name);
 
   % Get/Set axis limits
   if (~isempty(ax))

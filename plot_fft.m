@@ -37,34 +37,7 @@ function plot_fft()
   plot_fcn(a, analysed.spectrum_freqs, to_be_plotted, 'b');
   xlabel(a, ["Frequency (", data.frequnits, ")"]);
   ylabel(a, ylabel_text);
-
-  % Create an informative title
-  if (isfield(analysed, "fft_title"))
-    fft_title = analysed.fft_title;
-  else
-    if (analysis.only_visible)
-      tax = plots.timeseries.axis;
-      xlo = num2str(max([tax(1), 0]));
-      xhi = num2str(min([tax(2), analysed.t(end)]));
-    else
-      xlo = "0";
-      xhi = num2str(analysed.N * analysed.dt);
-    end % if
-    fft_title = ["FFT of timeseries between ", xlo, " and ", xhi, " ", data.timeunits];
-    if (analysis.apply_hamming)
-      fft_title = [fft_title, "\nHamming window applied"];
-    end % if
-    if (analysis.apply_hanning)
-      fft_title = [fft_title, "\nHanning window applied"];
-    end % if
-    if (analysis.zeromean)
-      fft_title = [fft_title, "\nZero-meaning timeseries"];
-    end % if
-    if (analysis.zeropad)
-      fft_title = [fft_title, "\nZero-padding timeseries"];
-    end % if
-  end % if
-  title(a, fft_title);
+  set_title(plot_name);
 
   % Get/Set axis limits
   if (~isempty(ax))
