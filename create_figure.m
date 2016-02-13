@@ -978,13 +978,28 @@ function point = fig2ax_coords(plot_name)
     return
   end % if
 
+  % If y-axis is logscale, calculate things accordingly
+  islog = false;
+  if (isfield(plots.(plot_name), "islog"))
+    if (plots.(plot_name).islog && (figures.(plot_name).dims == 1))
+      % Assumption: only y-axes that fit these conditions are allowed to be logscale
+      islog = true;
+    end % if
+  end % if
+
   point   = get(f, "currentpoint");
   f_pos   = get(f, "position");
   f_width = f_pos(3:4);
   a_pos   = get(a, "position"); % values are in figure window units
-  a_axis  = plots.(plot_name).axis;
+  a_axis = plots.(plot_name).axis;
+  if (islog)
+    a_axis(3:4) = log(a_axis(3:4));
+  end % if
   a_width = diff(reshape(a_axis,2,2));
   a_orig  = a_axis([1,3]);
   point   = (point./f_width - a_pos(1:2)) ./ a_pos(3:4).*a_width + a_orig;
+  if (islog)
+    point(2) = exp(point(2));
+  end % if
 
 end % function
