@@ -59,7 +59,7 @@ function plot_profile()
     ymax = plots.(plot_name).axis(4);
     mygreen = [0.5, 1.0, 0.5];
     if (x1 <= x2)
-      area(a, profile_mask, [ymax,ymax], ymin, "facecolor", mygreen, "linewidth", 0);
+      area(a, analysis.profile_mask, [ymax,ymax], ymin, "facecolor", mygreen, "linewidth", 0);
     else
       area(a, [0,x2], [ymax,ymax], ymin, "facecolor", mygreen, "linewidth", 0);
       area(a, [x1,1], [ymax,ymax], ymin, "facecolor", mygreen, "linewidth", 0);

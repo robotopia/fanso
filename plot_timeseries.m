@@ -24,9 +24,7 @@ function plot_timeseries()
 
   % Plot different things depending on whether the breakpoints are
   % to be "applied" or not (i.e. whether the timeseries has been flattened).
-  if (isempty(analysis.breakpoints))
-    flatten();
-  end % if
+  flatten();
 
   if (analysis.apply_bps)
     plot(a, analysed.t, analysed.flattened, 'b');

@@ -713,53 +713,6 @@ function Xclear_mask(src, data)
 
 end % function
 
-function Xselect_mask(src, data)
-
-  global profile_mask
-
-  global fig_handles
-  figure(fig_handles(3)); % Assumes figure is already open
-
-  title('Choose low phase for start of mask');
-  [x1, y1, button1] = ginput(1);
-
-  title('Choose high phase for end of mask');
-  [x2, y2, button2] = ginput(1);
-
-  profile_mask = [x1,x2];
-  set_unsaved_changes(true);
-  apply_profile_mask();
-
-  % Update figures
-  get_axes();
-  replot();
-
-end % function
-
-function Xapply_profile_mask()
-
-  global timeseries
-  global profile_mask
-  global breakpoint_mask
-
-  global period
-  global dt
-
-  % Calculate the phase of all the points in the timeseries
-  N = length(timeseries);
-  t = [0:(N-1)]' * dt;
-  phase = mod(t,period)/period;
-
-  % Set the breakpoint_mask to "0" for points "within" the mask
-  if (profile_mask(1) <= profile_mask(2))
-    mask_idxs = (phase >= profile_mask(1)) & (phase <= profile_mask(2));
-  else
-    mask_idxs = (phase >= profile_mask(1)) | (phase <= profile_mask(2));
-  end % if
-  breakpoint_mask = ~mask_idxs;
-
-end % function
-
 function Xset_nbins(newnbins)
 
   global nprofile_bins

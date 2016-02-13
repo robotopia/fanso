@@ -543,6 +543,16 @@ function keypressfcn(src, evt)
       % Select profile mask %
       %%%%%%%%%%%%%%%%%%%%%%%
 
+      % Only do anything if the profile plot is open
+      if (isempty(figures.profile.ax_handle))
+        return;
+      end % if
+
+      analysed.profile_title = "Choose low phase for start of mask";
+      set_title("profile");
+      analysed.profilemask_click = 1;
+      set(figures.profile.fig_handle, "windowbuttondownfcn", @select_profilemask_click);
+
     case 'l'
       %%%%%%%%%%%%%%%%%%%%%%%
       % Toggle log plotting %
@@ -816,5 +826,38 @@ function set_period(newperiod)
 
   % Update the title on the profile plot
   set_title("profile");
+
+end % function
+
+function select_profilemask_click(src, button)
+
+  global figures;
+
+  global analysis;
+  global analysed;
+
+  f = figures.profile.fig_handle;
+  a = figures.profile.ax_handle;
+
+  switch button
+    case 1 % Left mouse button
+      point = get(a, "currentpoint"); % Get click coordinates
+      switch analysed.profilemask_click
+        case 1 % on first click
+          analysed.profile_mask = point(1,1); % Save clicked point
+          analysed.profile_title = "Choose high phase for end of mask";
+          set_title("profile");
+          analysed.profilemask_click = 2;
+        case 2 % on second click
+          set_analysis_value("profile_mask", [analysed.profile_mask, point(1,1)]);
+          analysed = rmfield(analysed, {"profile_title", "profile_mask", "profilemask_click"});
+          figures.profile.drawfcn();
+          figures.timeseries.drawfcn();
+          set(f, "windowbuttondownfcn", []);
+      end % switch
+
+    case 3 % Right mouse button
+
+  end % switch
 
 end % function
