@@ -18,6 +18,7 @@ function fanso(init_filename)
 
   % Require that we are using the correct graphics toolkit (FLTK)
   gtk = 'fltk';
+  %gtk = 'fltk';
   if (~any(strcmp(available_graphics_toolkits(), gtk)))
     disp(['This function requires ',gtk,' to be installed.'])
     return;

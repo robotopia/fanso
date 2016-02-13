@@ -15,9 +15,10 @@ function create_figure(plot_name)
       set(f, "position", figures.(plot_name).defaultpos);
     end % if
 
-    % Set callback function for when a key is pressed
+    % Set callback functions for mouse and keyboard events
     if (~isempty(data))
       set(figures.(plot_name).fig_handle, "keypressfcn", @keypressfcn);
+      set(figures.(plot_name).fig_handle, "windowbuttondownfcn", {@panzoom_down, plot_name});
     end % if
 
     % Set callback function for when figure is closed
@@ -377,28 +378,22 @@ function keypressfcn(src, evt)
   save_views();
 
   % Get the plot_name of the figure window in which the key was pressed
-  this_plot_name = [];
+  plot_name  = fighandle2plotname(src);
   plot_names = fieldnames(figures);
-  for n = 1:length(plot_names)
-    plot_name = plot_names{n};
-    if (src == figures.(plot_name).fig_handle)
-      this_plot_name = plot_name;
-      break;
-    end % if
-  end % for
 
-  if (isempty(this_plot_name))
+  if (isempty(plot_name))
     error("Unknown callback figure handle in keypressfcn");
   end % if
 
   %if (any(strcmp(evt.Key, {"f1", "f2", "f3", "f4", "f5", "f6", "f7"})))
   if (any(strcmp(evt.Key, {"f1", "f2", "f3"})))
-    plot_no    = str2num(evt.Key(2));
-    plot_name  = plot_names{plot_no};
-    if (isempty(figures.(plot_name).fig_handle))
-      create_figure(plot_name);
-      figures.(plot_name).drawfcn();
+    plot_no         = str2num(evt.Key(2));
+    this_plot_name  = plot_names{plot_no};
+    if (isempty(figures.(this_plot_name).fig_handle))
+      create_figure(this_plot_name);
+      figures.(this_plot_name).drawfcn();
     end % if
+    return
   end % switch
 
   switch evt.Character
@@ -557,45 +552,45 @@ function keypressfcn(src, evt)
       %%%%%%%%%%%%%%%%%%%%%%%
       % Toggle log plotting %
       %%%%%%%%%%%%%%%%%%%%%%%
-      if (~figures.(this_plot_name).isfft)
+      if (~figures.(plot_name).isfft)
         return % (Nothing to be done for non-FFT plots)
       end % if
 
       % Toggle the islog value
-      plots.(this_plot_name).islog = ~plots.(this_plot_name).islog;
+      plots.(plot_name).islog = ~plots.(plot_name).islog;
       set_unsaved_changes(true);
 
       % Get current axis limits depending on whether it's a 1D or 2D plot
-      switch figures.(this_plot_name).dims
+      switch figures.(plot_name).dims
         case 1 % 1D
-          ax = plots.(this_plot_name).axis(3:4);
+          ax = plots.(plot_name).axis(3:4);
         case 2 % 2D
-          ax = plots.(this_plot_name).cax;
+          ax = plots.(plot_name).cax;
       end % switch
 
       % If values were negative, enforce positive
-      if (plots.(this_plot_name).islog)
+      if (plots.(plot_name).islog)
         if (ax(1) <= 0)
-          ax(1) = max([min(analysed.spectrum_vals), eps]);
+          ax(1) = max([min(abs(analysed.spectrum_vals)), eps]);
         end % if
         if (ax(2) <= 0)
-          ax(2) = max([max(analysed.spectrum_vals), eps]);
+          ax(2) = max([max(abs(analysed.spectrum_vals)), eps]);
         end % if
       end % if
 
       % Have to change c-axis manually
-      if (figures.(this_plot_name).dims == 2)
-        if (plots.(this_plot_name).islog)
-          plots.(this_plot_name).cax = log10(ax);
+      if (figures.(plot_name).dims == 2)
+        if (plots.(plot_name).islog)
+          plots.(plot_name).cax = log10(ax);
         else
-          plots.(this_plot_name).cax = 10.^ax;
+          plots.(plot_name).cax = 10.^ax;
         end % if
       else
-        plots.(this_plot_name).axis(3:4) = ax;
+        plots.(plot_name).axis(3:4) = ax;
       end % if
 
       % Replot just this plot
-      figures.(this_plot_name).drawfcn();
+      figures.(plot_name).drawfcn();
 
     case 'm'
       %%%%%%%%%%%%%%%%%%%%%%%%%
@@ -705,6 +700,23 @@ function keypressfcn(src, evt)
       figures.fft.drawfcn();
 
   end % switch
+
+end % function
+
+function this_plot_name = fighandle2plotname(f)
+
+  global figures;
+
+  % Get the plot_name of the figure window in which the key was pressed
+  this_plot_name = [];
+  plot_names = fieldnames(figures);
+  for n = 1:length(plot_names)
+    plot_name = plot_names{n};
+    if (f == figures.(plot_name).fig_handle)
+      this_plot_name = plot_name;
+      break;
+    end % if
+  end % for
 
 end % function
 
@@ -859,5 +871,120 @@ function select_profilemask_click(src, button)
     case 3 % Right mouse button
 
   end % switch
+
+end % function
+
+%%%%%%%%%%%%%%%%%%%%%%%%
+% PAN / ZOOM FUNCTIONS %
+%%%%%%%%%%%%%%%%%%%%%%%%
+
+function panzoom_down(src, button, plot_name)
+
+  global analysed;
+
+  % Only do anything if the left or right mouse buttons were clicked
+  if (~any(button == [1,3]))
+    return
+  end % if
+
+  % Get the point that was clicked in axis coordinates, and which button was used
+  analysed.panzoom.point1 = fig2ax_coords(plot_name);
+  analysed.panzoom.button = button;
+
+  % Set the motion and up callback functions
+  set(src, "windowbuttonmotionfcn", {@panzoom_motion, plot_name});
+  set(src, "windowbuttonupfcn",     {@panzoom_up,     plot_name});
+
+end % function
+
+function panzoom_motion(src, button, plot_name)
+
+  global figures;
+  global plots;
+  global analysed;
+
+  % Get the current cursor position
+  analysed.panzoom.point2 = fig2ax_coords(plot_name);
+
+  % Extra processing (namely, moving the axes), if we're in "pan" mode
+  if (analysed.panzoom.button == 1) % = left button = pan
+    % If y-axis is logscale, calculate things accordingly
+    islog = false;
+    if (isfield(plots.(plot_name), "islog"))
+      if (plots.(plot_name).islog && (figures.(plot_name).dims == 1))
+        % Assumption: only y-axes that fit these conditions are allowed to be logscale
+        islog = true;
+      end % if
+    end % if
+
+    % (Linear) change in position
+    delta_pos = analysed.panzoom.point2 - analysed.panzoom.point1;
+    plots.(plot_name).axis(1:2) -= delta_pos(1); % Change the x axis in any case
+
+    if (~islog)
+      plots.(plot_name).axis(3:4) -= delta_pos(2);
+    else
+      delta_pos_log = analysed.panzoom.point2 ./ analysed.panzoom.point1;
+      plots.(plot_name).axis(3:4) ./= delta_pos_log(2);
+    end % if
+  end % if
+
+  % Replot the figure
+  figures.(plot_name).drawfcn();
+
+end % function
+
+function panzoom_up(src, button, plot_name)
+
+  global figures;
+  global plots;
+  global analysed;
+
+  % Panning takes care of itself, but when zooming...
+  if (analysed.panzoom.button == 3) % = right button = zoom
+    xmin = min([analysed.panzoom.point1(1), analysed.panzoom.point2(1)]);
+    xmax = max([analysed.panzoom.point1(1), analysed.panzoom.point2(1)]);
+    ymin = min([analysed.panzoom.point1(2), analysed.panzoom.point2(2)]);
+    ymax = max([analysed.panzoom.point1(2), analysed.panzoom.point2(2)]);
+
+    % Only zoom if zoom window has non-zero height and width
+    if ((xmax > xmin) && (ymax > ymin))
+      plots.(plot_name).axis = [xmin, xmax, ymin, ymax];
+    end % if
+  end % if
+
+  % Clear relevant "analysed" variables
+  analysed = rmfield(analysed, "panzoom");
+
+  % Redraw figure
+  figures.(plot_name).drawfcn();
+
+  % Set the motion and up callback functions
+  set(src, "windowbuttonmotionfcn", []);
+  set(src, "windowbuttonupfcn",     []);
+
+end % function
+
+function point = fig2ax_coords(plot_name)
+
+  global figures;
+  global plots;
+
+  f = figures.(plot_name).fig_handle;
+  a = figures.(plot_name).ax_handle;
+
+  % If either figure or axes handles don't exist, don't bother
+  if (isempty(f) || isempty(a))
+    return
+  end % if
+
+  point   = get(f, "currentpoint");
+  f_pos   = get(f, "position");
+  f_width = f_pos(3:4);
+  a_pos   = get(a, "position"); % values are in figure window units
+  a_axis  = plots.(plot_name).axis;
+  a_width = diff(reshape(a_axis,2,2));
+  a_orig  = a_axis([1,3]);
+  point   = (point./f_width - a_pos(1:2)) ./ a_pos(3:4).*a_width + a_orig;
 
 end % function
