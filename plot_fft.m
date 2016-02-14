@@ -19,6 +19,7 @@ function plot_fft()
   apply_transforms();
 
   % Calculate values for the FFT abcissa...
+  n                        = length(analysed.transformed);
   df                       = 1/(analysed.dt*n);
   analysed.spectrum_freqs  = [0:(n-1)] * df;
   % ...and the FFT ordinate

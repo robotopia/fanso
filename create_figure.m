@@ -411,8 +411,10 @@ function keypressfcn(src, evt)
               "^ = toggle show peaks",
               "b = change number of profile bins",
               "B = toggle breakpoint edit mode",
+              "c = change colormap",
               "f = flatten timeseries",
               "h = display this help",
+              "i = invert colormap",
               "k = select profile mask",
               "l = toggle logarithmic plot for current figure",
               "m = toggle Hamming window",
@@ -520,6 +522,19 @@ function keypressfcn(src, evt)
       % Flip the mode
       analysed.bp_editmode = ~analysed.bp_editmode;
 
+    case 'c'
+      %%%%%%%%%%%%%%%%%%%
+      % Change colormap %
+      %%%%%%%%%%%%%%%%%%%
+      [sel, ok] = listdlg("liststring",    colormap("list"), ...
+                          "selectionmode", "single", ...
+                          "initialvalue",  plots.(plot_name).cmap);
+
+      if (ok)
+        plots.(plot_name).cmap = sel;
+        figures.(plot_name).drawfcn();
+      end % if
+
     case 'f'
       %%%%%%%%%%%%%%%%%%
       % Toggle flatten %
@@ -530,6 +545,14 @@ function keypressfcn(src, evt)
       for n = 1:length(plot_names)
         figures.(plot_names{n}).drawfcn();
       end % for
+
+    case 'i'
+      %%%%%%%%%%%%%%%%%%%
+      % Invert colormap %
+      %%%%%%%%%%%%%%%%%%%
+      plots.(plot_name).cinv = ~plots.(plot_name).cinv;
+      set_unsaved_changes(true);
+      figures.(plot_name).drawfcn();
 
     case 'k'
       %%%%%%%%%%%%%%%%%%%%%%%
