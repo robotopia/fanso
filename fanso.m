@@ -34,9 +34,9 @@ function fanso(init_filename)
   global figures;
   figures = struct();
 
-  plot_names = {"timeseries", "fft", "profile", "hrfs", "waterfall", "tdfs", "modenv"};
-  plot_dims  = [1, 1, 1, 2, 2, 2, 1];
-  plot_isfft = [0, 1, 0, 1, 0, 1, 0];
+  plot_names = {"timeseries", "fft", "profile", "pulsestack", "tdfs", "modenv"};
+  plot_dims  = [1, 1, 1, 2, 2, 1];
+  plot_isfft = [0, 1, 0, 0, 1, 0];
 
   for n = 1:length(plot_names)
     figures.(plot_names{n}).drawfcn     = str2func(["plot_", plot_names{n}]); % Function that does the plotting
@@ -128,82 +128,6 @@ function Xset_waterfall_plot_type(src, data, newvalue)
 
 end % function
 
-function Xset_axis(fig_no, axis_char, newmin = NaN, newmax = NaN)
-
-  global plot_params
-
-  try
-    colmax = 2*find(axis_char == "xyzc");
-    colmin = colmax - 1;
-  catch
-    errordlg({["Unfamiliar axis code (\"", axis_char, "\":"], lasterr()});
-    return
-  end % try_catch
-
-  % Get current values
-  curr_min = plot_params(fig_no, colmin);
-  curr_max = plot_params(fig_no, colmax);
-
-  % If new values are NaNs, then ask for values via a dialog box
-  switch isnan([newmin, newmax])
-
-    case [true, true]
-
-      % Ask for new values via a dialog box
-      cstrs = inputdlg({"Min:", "Max:"}, ["Enter new ", axis_char, "-axis limits"], ...
-                       1, {num2str(curr_min), num2str(curr_max)});
-
-      if (isempty(cstrs)) % They pushed cancel
-        return
-      end % if
-
-      newmin = str2num(cstrs{1});
-      newmax = str2num(cstrs{2});
-
-    case [true, false]
-
-      % Ask for one new value
-      cstr = inputdlg({"Min:"}, ["Enter new ", axis_char, "-axis minimum"], ...
-                      1, {num2str(curr_min)});
-
-      if (isempty(cstr)) % They pushed cancel
-        return
-      end % if
-
-      newmin = str2num(cstr{1});
-
-    case [false, true]
-
-      % Ask for one new value
-      cstr = inputdlg({"Max:"}, ["Enter new ", axis_char, "-axis maximum"], ...
-                      1, {num2str(curr_max)});
-
-      if (isempty(cstr)) % They pushed cancel
-        return
-      end % if
-
-      newmax = str2num(cstr{1});
-
-  end % switch
-
-  % Check if new values are different from old
-  if ((newmin ~= curr_min) || (newmax ~= curr_max))
-    set_unsaved_changes(true);
-  end % if
-
-  % Actually make the changes
-  try
-    plot_params(fig_no, colmin) = newmin;
-    plot_params(fig_no, colmax) = newmax;
-  catch
-    errordlg({"Only numeric values allowed:", lasterr()});
-    return
-  end % try_catch
-
-  replot(fig_no);
-
-end % function
-
 function Xscale_caxis(src, data, fig_no, minfactor, maxfactor)
 
   if (all(~[minfactor, maxfactor])) % Putting in zeros for these parameters brings up a dialog box
@@ -229,6 +153,7 @@ function Xscale_caxis(src, data, fig_no, minfactor, maxfactor)
 
 end % function
 
+% HRFS -- but no point implementing this again.
 function Xplot_hrfs(src, data)
 
   global fig_handles
@@ -319,7 +244,7 @@ function Xplot_waterfall(src, data)
     return
   end % if
 
-  % Switch to/Create HRFS figure and keep track of the view window
+  % Switch to/Create waterfall figure and keep track of the view window
   fig_no = 5;
   first_time = (fig_handles(fig_no) == 0);
 
@@ -657,45 +582,6 @@ function Xapply_tdfs_filters()
 
 end % function
 
-function Xreshape_timeseries_into_grid(do_visible = true)
-
-  global timeseries
-  global flattened
-  global timeseries_grid
-  global plot_params
-
-  global period % Assumed to have been set by this point
-  global dt
-
-  global only_visible
-  global apply_bps
-
-  % Get the appropriate timeseries
-  if (apply_bps)
-    to_be_plotted = flattened;
-  else
-    to_be_plotted = timeseries;
-  end % if
-
-  % Are we processing just the visible part?
-  if (only_visible && do_visible)
-    xax = plot_params(1,1:2);
-    min_idx = max([floor(xax(1)/dt)+1, 1]);
-    max_idx = min([floor(xax(2)/dt)+1, length(timeseries)]); % <-- Check this
-    to_be_plotted = to_be_plotted([min_idx:max_idx]);
-  end % if
-
-  % Prepare the grid of values
-  N         = length(to_be_plotted);
-  t         = ([1:N]' - 0.5) * dt; % -0.5 is to avoid some of the more common computer precision errors
-  pulse_no  = floor(t/period) + 1;
-  phase_bin = floor(mod(t,period)/dt) + 1; % The "floor" here is problematic. It means some of the pulses
-                                           % may be shifted by up to dt/2. I see no other way around this.
-  accum_subs = [pulse_no, phase_bin];
-  timeseries_grid = accumarray(accum_subs, to_be_plotted);
-
-end % function
-
 function Xclear_mask(src, data)
 
   global profile_mask
@@ -898,31 +784,6 @@ function Xsuccess = set_axes(fig_no)
     end % if
 
   end % for
-
-end % function
-
-function Xapply_colormap(fig_no)
-
-  global plot_params
-  global fig_handles
-
-  % Switch to the appropriate figure
-  h = fig_handles(fig_no);
-  if (h)
-    figure(h);
-  else
-    return
-  end % if
-
-  % For some reason, the listed colormaps don't change the SIZE
-  % of the existing colormap, so I have to do that explicitly:
-  colormap(zeros(64,3));
-  colormap_name = colormap("list"){plot_params(fig_no, 17)};
-  to_be_inverted = plot_params(fig_no, 18);
-  cmap = colormap(colormap_name);
-  if (to_be_inverted)
-    colormap(flipud(cmap));
-  end
 
 end % function
 

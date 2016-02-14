@@ -15,8 +15,15 @@ function plot_fft()
   end % if
   ax = plots.(plot_name).axis;
 
-  % Calculate the FFT
-  calc_fft();
+  % Apply windowing, etc.
+  apply_transforms();
+
+  % Calculate values for the FFT abcissa...
+  df                       = 1/(analysed.dt*n);
+  analysed.spectrum_freqs  = [0:(n-1)] * df;
+  % ...and the FFT ordinate
+  analysed.spectrum_vals   = fft(analysed.transformed);
+
   to_be_plotted = abs(analysed.spectrum_vals);
   ylabel_text   = "Amplitude";
 

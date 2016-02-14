@@ -19,15 +19,19 @@ function flatten()
   bps = [t(1)-1, analysis.breakpoints, t(end)+1];
 
   % Calculate the breakpoint mask from the profile mask
-  ph = mod(t, analysis.period) / analysis.period;
-  pm = analysis.profile_mask;
-  if (~isempty(pm))
-    if (pm(1) <= pm(2))
-      mask_idxs = (ph >= pm(1)) & (ph <= pm(2));
-    else
-      mask_idxs = (ph >= pm(1)) | (ph <= pm(2));
+  if (~isempty(analysis.profile_mask))
+    ph = mod(t, analysis.period) / analysis.period;
+    pm = analysis.profile_mask;
+    if (~isempty(pm))
+      if (pm(1) <= pm(2))
+        mask_idxs = (ph >= pm(1)) & (ph <= pm(2));
+      else
+        mask_idxs = (ph >= pm(1)) | (ph <= pm(2));
+      end % if
+      breakpoint_mask = ~mask_idxs;
     end % if
-    breakpoint_mask = ~mask_idxs;
+  else
+    breakpoint_mask = ones(analysed.N, 1);
   end % if
 
   % Loop through the breakpoints and detrend each segment

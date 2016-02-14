@@ -385,8 +385,7 @@ function keypressfcn(src, evt)
     error("Unknown callback figure handle in keypressfcn");
   end % if
 
-  %if (any(strcmp(evt.Key, {"f1", "f2", "f3", "f4", "f5", "f6", "f7"})))
-  if (any(strcmp(evt.Key, {"f1", "f2", "f3"})))
+  if (any(strcmp(evt.Key, {"f1", "f2", "f3", "f4", "f5", "f6"})))
     plot_no         = str2num(evt.Key(2));
     this_plot_name  = plot_names{plot_no};
     if (isempty(figures.(this_plot_name).fig_handle))
@@ -405,10 +404,9 @@ function keypressfcn(src, evt)
       msgbox({"F1 = plot timeseries",
               "F2 = plot FFT",
               "F3 = plot profile",
-              "F4 = plot HRFS",
-              "F5 = plot waterfall",
-              "F6 = plot 2DFS",
-              "F7 = plot modulation envelopes",
+              "F4 = plot pulse stack",
+              "F5 = plot 2DFS",
+              "F6 = plot modulation envelopes",
               "0 = toggle zero-padding",
               "^ = toggle show peaks",
               "b = change number of profile bins",
@@ -643,9 +641,8 @@ function keypressfcn(src, evt)
       %%%%%%%%%%%%%%%%%%%%%%%
       toggle_analysis_value("only_visible");
       figures.fft.drawfcn();
-      figures.waterfall.drawfcn();
+      figures.pulsestack.drawfcn();
       figures.tdfs.drawfcn();
-      figures.hrfs.drawfcn();
       % Do other plots need to be redrawn?
 
     case 's'
@@ -927,6 +924,8 @@ function panzoom_motion(src, button, plot_name)
       delta_pos_log = analysed.panzoom.point2 ./ analysed.panzoom.point1;
       plots.(plot_name).axis(3:4) ./= delta_pos_log(2);
     end % if
+
+    set_unsaved_changes(true);
   end % if
 
   % Replot the figure
@@ -950,6 +949,7 @@ function panzoom_up(src, button, plot_name)
     % Only zoom if zoom window has non-zero height and width
     if ((xmax > xmin) && (ymax > ymin))
       plots.(plot_name).axis = [xmin, xmax, ymin, ymax];
+      set_unsaved_changes(true);
     end % if
   end % if
 

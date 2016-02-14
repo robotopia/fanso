@@ -44,9 +44,7 @@ function set_title(plot_name)
         case "profile"
           title(a, sprintf("Period = %.12f %s;    No. of bins = %d", analysis.period, data.timeunits, analysis.nprofile_bins));
 
-        case "hrfs"
-
-        case "waterfall"
+        case "pulsestack"
 
         case "tdfs"
 
