@@ -32,6 +32,7 @@ function plot_pulsestack()
   ys = [1:nys];            % Pulse number
 
   % Plot it up!
+  plots.(plot_name).autoscale = [0, 1, 0.5, nys+0.5];
   imagesc(a, xs, ys, analysed.stacked.all);
   apply_colormap(plot_name);
   axis("xy");
@@ -60,7 +61,7 @@ function plot_pulsestack()
   if (~isempty(ax))
     axis(a, ax);
   else
-    plots.(plot_name).axis = axis(a);
+    plots.(plot_name).axis      = axis(a);
   end % if
 
 end % function

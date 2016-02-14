@@ -42,6 +42,7 @@ function plot_fft()
   end % if
 
   % Plot up the FFT
+  plots.(plot_name).autoscale = [0, data.samplingrate/2, min(to_be_plotted), max(to_be_plotted)];
   plot_fcn(a, analysed.spectrum_freqs, to_be_plotted, 'b');
   xlabel(a, ["Frequency (", data.frequnits, ")"]);
   ylabel(a, ylabel_text);

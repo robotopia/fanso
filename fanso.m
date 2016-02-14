@@ -106,28 +106,6 @@ end % function
 % Everything after this point will eventually be relocated
 %
 
-function Xset_waterfall_plot_type(src, data, newvalue)
-
-  global waterfall_plot_type
-  global m_waterfall_colormap
-
-  if (waterfall_plot_type ~= newvalue)
-
-    % Change the value!
-    waterfall_plot_type = newvalue;
-    set_unsaved_changes(true);
-
-    % Enable/Disable the colormap menu for 2D/3D waterfall plots
-    set(m_waterfall_colormap, "enable", on_off(~newvalue)); % 0 = 2D = menu ON;  1 = 3D = menu OFF
-
-    % Update the figure
-    get_axes(0,0,5);
-    replot(5);
-
-  end % if
-
-end % function
-
 function Xscale_caxis(src, data, fig_no, minfactor, maxfactor)
 
   if (all(~[minfactor, maxfactor])) % Putting in zeros for these parameters brings up a dialog box

@@ -20,14 +20,18 @@ function plot_timeseries()
     analysed.N  = length(data.timeseries);             % The length of the timeseries
     analysed.dt = 1/data.samplingrate;                 % The time between adjacent samples
     analysed.t  = [0:(analysed.N-1)]' * analysed.dt;   % The time axis
+    figures.(plot_name).autoscale(1:2) = [min(analysed.t), max(analysed.t)];
   end % if
 
   % Plot different things depending on whether the breakpoints are
   % to be "applied" or not (i.e. whether the timeseries has been flattened).
   flatten();
 
+  plots.(plot_name).autoscale = [min(analysed.t), max(analysed.t), min(data.timeseries), max(data.timeseries)];
+
   if (analysis.apply_bps)
     plot(a, analysed.t, analysed.flattened, 'b');
+    plots.(plot_name).autoscale(3:4) = [min(analysed.flattened), max(analysed.flattened)];
   else
     if(~isempty(analysis.breakpoints))
 

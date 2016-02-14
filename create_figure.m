@@ -444,6 +444,16 @@ function keypressfcn(src, evt)
       toggle_analysis_value("show_peaks");
       figures.tdfs.drawfcn();
 
+    case 'a'
+      %%%%%%%%%%%%%%%%%%%%
+      % Autoscale figure %
+      %%%%%%%%%%%%%%%%%%%%
+      if (plots.(plot_name).axis ~= plots.(plot_name).autoscale)
+        plots.(plot_name).axis = plots.(plot_name).autoscale;
+        set_unsaved_changes(true);
+        figures.(plot_name).drawfcn();
+      end % if
+
     case 'b'
       %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
       % Change number of profile bins manually %

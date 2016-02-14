@@ -37,6 +37,7 @@ function plot_profile()
   calc_profile();
 
   % Plot it up!
+  plots.(plot_name).autoscale = [0, 1, min(analysed.profile), max(analysed.profile)];
   phase = [0:(analysis.nprofile_bins - 1)] / analysis.nprofile_bins;
   plot(a, phase, analysed.profile);
   xlabel(a, "Phase");
