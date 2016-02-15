@@ -14,10 +14,14 @@ function plot_pulsestack()
     return
   end % if
   ax = plots.(plot_name).axis;
+  cax = plots.(plot_name).cax;
 
   % Make sure the period has been set
   if (isempty(analysis.period))
-    errordlg('The period has not been set');
+    errordlg("The period has not been set");
+    delete(figures.(plot_name).fig_handle);
+    figures.(plot_name).fig_handle = [];
+    figures.(plot_name).ax_handle  = [];
     return
   end % if
 
@@ -61,7 +65,14 @@ function plot_pulsestack()
   if (~isempty(ax))
     axis(a, ax);
   else
-    plots.(plot_name).axis      = axis(a);
+    plots.(plot_name).axis = axis(a);
+  end % if
+
+  % Get/Set caxis limits
+  if (~isempty(cax))
+    caxis(a, cax);
+  else
+    plots.(plot_name).cax  = caxis(a);
   end % if
 
 end % function

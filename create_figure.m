@@ -408,7 +408,11 @@ function keypressfcn(src, evt)
               "F5 = plot 2DFS",
               "F6 = plot modulation envelopes",
               "0 = toggle zero-padding",
-              "^ = toggle show peaks",
+              "2 = toggle power / amplitude",
+              "+ = increase dynamic range max",
+              "= = decrease dynamic range max",
+              "_ = increase dynamic range min",
+              "- = decrease dynamic range min",
               "b = change number of profile bins",
               "B = toggle breakpoint edit mode",
               "c = change colormap",
@@ -437,18 +441,69 @@ function keypressfcn(src, evt)
         figures.fft.drawfcn();
       end % if
 
-    case '^'
-      %%%%%%%%%%%%%%%%%%%%%
-      % Toggle show peaks %
-      %%%%%%%%%%%%%%%%%%%%%
-      toggle_analysis_value("show_peaks");
-      figures.tdfs.drawfcn();
+    case '2'
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%
+      % Toggle power / amplitude %
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%
+      if (figures.(plot_name).isfft)
+        plots.(plot_name).ispower = ~plots.(plot_name).ispower;
+        set_unsaved_changes(true);
+        figures.(plot_name).drawfcn();
+      end % if
+
+    case '+'
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+      % Increase dynamic range max %
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+      if (figures.(plot_name).dims == 2) % 2D plot
+        cmax = plots.(plot_name).cax(2);
+        cmin = plots.(plot_name).cax(1);
+        plots.(plot_name).cax(2) += 0.1*(cmax - cmin);
+        set_unsaved_changes(true);
+        caxis(figures.(plot_name).ax_handle, plots.(plot_name).cax);
+      end % if
+
+    case '='
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+      % Decrease dynamic range max %
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+      if (figures.(plot_name).dims == 2) % 2D plot
+        cmax = plots.(plot_name).cax(2);
+        cmin = plots.(plot_name).cax(1);
+        plots.(plot_name).cax(2) -= 0.1*(cmax - cmin);
+        set_unsaved_changes(true);
+        caxis(figures.(plot_name).ax_handle, plots.(plot_name).cax);
+      end % if
+
+    case '_'
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+      % Increase dynamic range min %
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+      if (figures.(plot_name).dims == 2) % 2D plot
+        cmax = plots.(plot_name).cax(2);
+        cmin = plots.(plot_name).cax(1);
+        plots.(plot_name).cax(1) += 0.1*(cmax - cmin);
+        set_unsaved_changes(true);
+        caxis(figures.(plot_name).ax_handle, plots.(plot_name).cax);
+      end % if
+
+    case '-'
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+      % Decrease dynamic range min %
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+      if (figures.(plot_name).dims == 2) % 2D plot
+        cmax = plots.(plot_name).cax(2);
+        cmin = plots.(plot_name).cax(1);
+        plots.(plot_name).cax(1) -= 0.1*(cmax - cmin);
+        set_unsaved_changes(true);
+        caxis(figures.(plot_name).ax_handle, plots.(plot_name).cax);
+      end % if
 
     case 'a'
       %%%%%%%%%%%%%%%%%%%%
       % Autoscale figure %
       %%%%%%%%%%%%%%%%%%%%
-      if (plots.(plot_name).axis ~= plots.(plot_name).autoscale)
+      if (~isequal(plots.(plot_name).axis, plots.(plot_name).autoscale))
         plots.(plot_name).axis = plots.(plot_name).autoscale;
         set_unsaved_changes(true);
         figures.(plot_name).drawfcn();
