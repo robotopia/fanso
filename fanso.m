@@ -202,63 +202,6 @@ function Xapply_shift_DC()
 
 end % function
 
-function Xapply_tdfs_filters()
-
-  global tdfs
-  global filters
-
-  % Get the x and y values
-  nxs = columns(tdfs);           nys = rows(tdfs);
-  xmin = -floor((nxs-1)/2);      xmax = ceil((nxs-1)/2);
-  ymin = -floor((nys-1)/2);      ymax = ceil((nys-1)/2);
-  xshift = -xmin;                yshift = -ymin;
-
-  % Shift so that DC is in the centre
-  tdfs = shift(tdfs, xshift, 2);
-  tdfs = shift(tdfs, yshift);
-
-  xs = [xmin:xmax];          % Units of   v_l*P1/(2*pi)   or   v_l*P1?
-  ys = [ymin:ymax] / nys;    % Units v_t * P1
-
-  [X, Y] = meshgrid(xs, ys);
-
-  nfilters = rows(filters);
-  for n = 1:nfilters
-    switch filters(n,3)
-      case 0 % horizontal filter
-        transmission = 2*abs(Y - filters(n,1))/filters(n,2) - 1;
-      case 1 % vertical filter
-        transmission = 2*abs(X - filters(n,1))/filters(n,2) - 1;
-    end % switch
-    transmission(transmission > 1) = 1;
-    transmission(transmission < 0) = 0;
-    tdfs .*= transmission;
-  end % for
-
-  % Shift back so that DC is at (1,1)
-  tdfs = shift(tdfs, -xshift, 2);
-  tdfs = shift(tdfs, -yshift);
-
-end % function
-
-function Xclear_mask(src, data)
-
-  global profile_mask
-  global breakpoint_mask
-
-  profile_mask = [0,0];
-  breakpoint_mask(:) = 1;
-
-  flatten();
-
-  set_unsaved_changes(true);
-
-  % Update figures
-  get_axes();
-  replot();
-
-end % function
-
 function Xclick_p2p3(src, data, fig_no)
 
   global fig_handles

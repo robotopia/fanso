@@ -71,7 +71,7 @@ function plot_tdfs()
   ylabel(a, "v_1P_1");
   set_title(plot_name);
 
-  % Plot the point of the new centre
+  % Plot the point of the new centre % ...Plot crosshairs instead?
   if (~isempty(analysis.shift_DC))
     hold(a, "on");
     plot(a, analysis.shift_DC(1), analysis.shift_DC(2), "g+");
@@ -94,16 +94,16 @@ function plot_tdfs()
                   xmax, xmax];
         Xinner = Xouter;
         Youter = [centre+width,   centre-width;
-                  centre+width,   centre-width] + shift_DC(2);
+                  centre+width,   centre-width];
         Yinner = [centre+width/2, centre-width/2;
-                  centre+width/2, centre-width/2] + shift_DC(2);
+                  centre+width/2, centre-width/2];
 
       case 1 % Vertical filter
 
         Xouter = [centre+width,   centre-width;
-                  centre+width,   centre-width] + shift_DC(1);
+                  centre+width,   centre-width];
         Xinner = [centre+width/2, centre-width/2;
-                  centre+width/2, centre-width/2] + shift_DC(1);
+                  centre+width/2, centre-width/2];
         Youter = [ymin, ymin;
                   ymax, ymax];
         Yinner = Youter;

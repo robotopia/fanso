@@ -329,7 +329,7 @@ end % function
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 function close_figure(src, data, plot_name)
 
-  global figures
+  global figures;
 
   % Save current views
   save_views();
@@ -367,12 +367,12 @@ end % function
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 function keypressfcn(src, evt)
 
-  global figures
+  global figures;
 
-  global data
-  global plots
-  global analysis
-  global analysed
+  global data;
+  global plots;
+  global analysis;
+  global analysed;
 
   % Save current views
   save_views();
@@ -416,6 +416,8 @@ function keypressfcn(src, evt)
               "b = change number of profile bins",
               "B = toggle breakpoint edit mode",
               "c = change colormap",
+              "e = add filter (to 2DFS)",
+              "E = delete filter (from 2DFS)",
               "f = flatten timeseries",
               "h = display this help",
               "i = invert colormap",
@@ -601,6 +603,50 @@ function keypressfcn(src, evt)
         figures.(plot_name).drawfcn();
       end % if
 
+    case 'd'
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+      % Toggle direction of filter when adding filters %
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+      if (isfield(analysed, "filter") && strcmp(plot_name, "tdfs")) % This only happens when in "create filter" mode
+        switch analysed.filter.direction
+          case "horizontal"
+            analysed.filter.direction = "vertical";
+          case "vertical"
+            analysed.filter.direction = "horizontal";
+        end % switch
+        analysed.tdfs_title = ["Click on the centre of the new (", analysed.filter.direction, ...
+                               ") filter\nPress 'd' to toggle direction filter\n", ...
+                               "Press 'q' to toggle quantisation (currently ", ...
+                               analysed.filter.quantised, ")"];
+        set_title(plot_name);
+      end % if
+
+    case 'e'
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%
+      % Create filter (in 2DFS) %
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%
+      if (strcmp(plot_name, "tdfs"))
+        analysed.filter.direction = "horizontal"; % h = horizontal
+        analysed.filter.quantised = "on";
+        analysed.filter.click_no = 1;
+        analysed.tdfs_title = ["Click on the centre of the new (", analysed.filter.direction, ...
+                               ") filter\nPress 'd' to toggle direction filter\n", ...
+                               "Press 'q' to toggle quantisation (currently ", ...
+                               analysed.filter.quantised, ")"];
+        set_title(plot_name);
+        set(figures.(plot_name).fig_handle, "windowbuttondownfcn", @add_filter);
+      end % if
+
+    case 'E'
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+      % Delete filter (from 2DFS) %
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+      if (strcmp(plot_name, "tdfs") && ~isempty(analysis.filters))
+        analysed.tdfs_title = "Click on filter to remove\nRight click to cancel";
+        set_title("tdfs");
+        set(figures.(plot_name).fig_handle, "windowbuttondownfcn", @remove_filter);
+      end % if
+
     case 'f'
       %%%%%%%%%%%%%%%%%%
       % Toggle flatten %
@@ -741,6 +787,24 @@ function keypressfcn(src, evt)
       [sel, ok] = listdlg("ListString", pulsarnames, "SelectionMode", "Single", "Name", "Select pulsar");
       if (ok)
         set_period(pulsars.(pulsarnames{sel}).period);
+      end % if
+
+    case 'q'
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+      % Toggle quantisation when adding filters %
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+      if (isfield(analysed, "filter") && strcmp(plot_name, "tdfs")) % This only happens when in "create filter" mode
+        switch analysed.filter.quantised
+          case "on"
+            analysed.filter.quantised = "off";
+          case "off"
+            analysed.filter.quantised = "on";
+        end % switch
+        analysed.tdfs_title = ["Click on the centre of the new (", analysed.filter.direction, ...
+                               ") filter\nPress 'd' to toggle direction filter\n", ...
+                               "Press 'q' to toggle quantisation (currently ", ...
+                               analysed.filter.quantised, ")"];
+        set_title(plot_name);
       end % if
 
     case 'v'
@@ -1113,4 +1177,120 @@ function point = fig2ax_coords(plot_name)
     point(2) = exp(point(2));
   end % if
 
+end % function
+
+function add_filter(src, button)
+
+  global figures;
+  global analysis;
+  global analysed;
+
+  % Only do anything for left button click
+  if (button ~= 1)
+    return
+  end % if
+
+  % Get the last clicked position
+  a = figures.tdfs.ax_handle;
+  pos = get(a, "currentpoint");
+  pos = pos(1,1:2);
+
+  switch analysed.filter.click_no
+    case 1 % On first click, choose centre of filter
+      analysed.filter.pos = pos;
+      analysed.tdfs_title = ["Click on the edge of the new (", analysed.filter.direction, ...
+                             ") filter\nPress 'd' to toggle direction filter\n", ...
+                             "Press 'q' to toggle quantisation (currently ", ...
+                             analysed.filter.quantised, ")"];
+      set_title("tdfs");
+      analysed.filter.click_no = 2;
+    case 2
+      % Calculate filter parameters
+      switch analysed.filter.direction
+        case "horizontal"
+          centre = analysed.filter.pos(2);
+          width  = abs(pos(2) - analysed.filter.pos(2));
+          dir    = 0;
+        case "vertical"
+          centre = analysed.filter.pos(1);
+          width  = abs(pos(1) - analysed.filter.pos(1));
+          dir    = 1;
+      end % switch
+
+      % Add filter to list
+      analysis.filters = [analysis.filters; [centre, width, dir]];
+      set_unsaved_changes(true);
+
+      % Reset title
+      analysed = rmfield(analysed, "tdfs_title");
+
+      % Reset mouse click callback
+      set(figures.tdfs.fig_handle, "windowbuttondownfcn", {@panzoom_down, "tdfs"});
+
+      % Clean up "analysed" structure
+      analysed = rmfield(analysed, "filter");
+
+      % Redraw plots
+      figures.tdfs.drawfcn();
+      figures.modenv.drawfcn();
+  end % switch
+
+end % function
+
+function remove_filter(src, button)
+
+  global figures;
+  global analysis;
+  global analysed;
+
+  % Only do anything for left button click
+  if (~any(button == [1,3]))
+    return
+  end % if
+
+  if (button == 1)
+    % Get the last clicked position
+    a = figures.tdfs.ax_handle;
+    pos = get(a, "currentpoint");
+    pos = pos(1,1:2);
+
+    % Loop through filters and delete any containing the clicked region
+    to_be_kept = [];
+    for n = 1:rows(analysis.filters)
+      centre    = analysis.filters(n,1);
+      width     = analysis.filters(n,2);
+      direction = analysis.filters(n,3);
+
+      switch direction
+        case 0 % horizontal
+          pos_coord = pos(2);
+        case 1 % vertical
+          pos_coord = pos(1);
+      end % switch
+
+      % Check if user clicked OUTside filter
+      if (abs(pos_coord - centre) > width)
+        to_be_kept = [to_be_kept, n];
+      end % if
+    end % for
+
+    % Only do anything if they successfully clicked inside at least one filter
+    if (length(to_be_kept) == rows(analysis.filters))
+      return
+    end % if
+
+    analysis.filters = analysis.filters(to_be_kept,:);
+    set_unsaved_changes(true);
+  end % if
+
+  % Reset title
+  analysed = rmfield(analysed, "tdfs_title");
+
+  % Reset mouse click callback
+  set(figures.tdfs.fig_handle, "windowbuttondownfcn", {@panzoom_down, "tdfs"});
+
+  % Redraw plots
+  figures.tdfs.drawfcn();
+  figures.modenv.drawfcn();
+ 
 end % function

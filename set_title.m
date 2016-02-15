@@ -45,10 +45,14 @@ function set_title(plot_name)
           title(a, sprintf("Period = %.12f %s;    No. of bins = %d", analysis.period, data.timeunits, analysis.nprofile_bins));
 
         case "pulsestack"
+          title(a, "");
 
         case "tdfs"
+          title(a, "");
 
         case "modenv"
+          title(a, "");
+
       end % switch
     end % if
   end % if
