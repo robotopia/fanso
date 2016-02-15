@@ -60,6 +60,7 @@ function plot_tdfs()
     clabel_text = ["log_{10} (", clabel_text, ")"];
   end % if
 
+  % Plot it up!
   plots.(plot_name).autoscale = [xmin, xmax, ymin, ymax];
   imagesc(a, analysed.tdfs.xs, analysed.tdfs.ys, to_be_plotted);
   axis("xy");
@@ -70,11 +71,49 @@ function plot_tdfs()
   ylabel(a, "v_1P_1");
   set_title(plot_name);
 
+  % Plot the point of the new centre
   if (~isempty(analysis.shift_DC))
-    hold on;
+    hold(a, "on");
     plot(a, analysis.shift_DC(1), analysis.shift_DC(2), "g+");
-    hold off;
+    hold(a, "off");
   end % if
+
+  % Plot the filters if in filter mode
+  hold(a, "on");
+  for n = 1:rows(analysis.filters) % For each filter in the list...
+
+    centre    = analysis.filters(n,1);
+    width     = analysis.filters(n,2);
+    direction = analysis.filters(n,3);
+
+    switch direction
+
+      case 0 % Horizontal filter
+
+        Xouter = [xmin, xmin;
+                  xmax, xmax];
+        Xinner = Xouter;
+        Youter = [centre+width,   centre-width;
+                  centre+width,   centre-width] + shift_DC(2);
+        Yinner = [centre+width/2, centre-width/2;
+                  centre+width/2, centre-width/2] + shift_DC(2);
+
+      case 1 % Vertical filter
+
+        Xouter = [centre+width,   centre-width;
+                  centre+width,   centre-width] + shift_DC(1);
+        Xinner = [centre+width/2, centre-width/2;
+                  centre+width/2, centre-width/2] + shift_DC(1);
+        Youter = [ymin, ymin;
+                  ymax, ymax];
+        Yinner = Youter;
+
+    end % switch
+
+    plot(a, Xouter, Youter, "g--", Xinner, Yinner, "g");
+
+  end % for
+  hold(a, "off");
 
   % Add a colorbar
   colorbar(a);

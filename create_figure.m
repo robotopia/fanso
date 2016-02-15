@@ -420,6 +420,7 @@ function keypressfcn(src, evt)
               "h = display this help",
               "i = invert colormap",
               "k = select profile mask",
+              "K = clear profile mask",
               "l = toggle logarithmic plot for current figure",
               "m = toggle Hamming window",
               "n = toggle Hanning window",
@@ -633,6 +634,25 @@ function keypressfcn(src, evt)
       set_title("profile");
       analysed.profilemask_click = 1;
       set(figures.profile.fig_handle, "windowbuttondownfcn", @select_profilemask_click);
+
+    case 'K'
+      %%%%%%%%%%%%%%%%%%%%%%
+      % Clear profile mask %
+      %%%%%%%%%%%%%%%%%%%%%%
+
+      % Only do anything if the profile plot is open
+      if (isempty(figures.profile.ax_handle))
+        return;
+      end % if
+
+      if (~isempty(analysis.profile_mask))
+        analysis.profile_mask = [];
+        set_unsaved_changes(true);
+        % Redraw all the figures
+        for n = 1:length(plot_names)
+          figures.(plot_names{n}).drawfcn();
+        end % for
+      end % if
 
     case 'l'
       %%%%%%%%%%%%%%%%%%%%%%%
@@ -948,8 +968,11 @@ function select_profilemask_click(src, button)
         case 2 % on second click
           set_analysis_value("profile_mask", [analysed.profile_mask, point(1,1)]);
           analysed = rmfield(analysed, {"profile_title", "profile_mask", "profilemask_click"});
-          figures.profile.drawfcn();
-          figures.timeseries.drawfcn();
+          % Redraw all the figures
+          plot_names = fieldnames(figures);
+          for n = 1:length(plot_names)
+            figures.(plot_names{n}).drawfcn();
+          end % for
           set(f, "windowbuttondownfcn", []);
       end % switch
 
