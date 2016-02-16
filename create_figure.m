@@ -331,10 +331,6 @@ function close_figure(src, data, plot_name)
 
   global figures;
 
-  % Save current views
-  save_views();
-
-  %if (any(strcmp(evt.Key, {"f1", "f2", "f3", "f4", "f5", "f6", "f7"})))
   % The timeseries figure gets special treatment
   if (strcmp(plot_name, "timeseries"))
 
@@ -373,9 +369,6 @@ function keypressfcn(src, evt)
   global plots;
   global analysis;
   global analysed;
-
-  % Save current views
-  save_views();
 
   % Get the plot_name of the figure window in which the key was pressed
   plot_name  = fighandle2plotname(src);
@@ -510,7 +503,11 @@ function keypressfcn(src, evt)
       if (~isequal(plots.(plot_name).axis, plots.(plot_name).autoscale))
         plots.(plot_name).axis = plots.(plot_name).autoscale;
         set_unsaved_changes(true);
-        figures.(plot_name).drawfcn();
+
+        % Don't replot the figure, just set the axes
+        for n = 1:figures.(plot_name).nplots
+          axis(figures.(plot_name).ax_handle(n), plots.(plot_name).axis(n,:));
+        end % for
       end % if
 
     case 'b'
@@ -903,26 +900,6 @@ function this_plot_name = fighandle2plotname(f)
 
 end % function
 
-function save_views()
-
-  global figures;
-  global plots;
-
-  plot_names = fieldnames(figures);
-  for n = 1:length(plot_names)
-    plot_name = plot_names{n};
-    a = figures.(plot_name).ax_handle;
-    if (~isempty(a))
-      ax = axis(a);
-      if (plots.(plot_name).axis ~= ax)
-        plots.(plot_name).axis = ax;
-        set_unsaved_changes(true);
-      end % if
-    end % if
-  end % for
-
-end % function
-
 function set_analysis_value(name, value)
 
   global analysis;
@@ -1103,21 +1080,33 @@ function panzoom_motion(src, button, plot_name)
       end % if
     end % if
 
+    % Get subplot number
+    s = find(gca == figures.(plot_name).ax_handle);
+
     % (Linear) change in position
     delta_pos = analysed.panzoom.point2 - analysed.panzoom.point1;
-    plots.(plot_name).axis(1:2) -= delta_pos(1); % Change the x axis in any case
+    plots.(plot_name).axis(s,1:2) -= delta_pos(1); % Change the x axis in any case
 
     if (~islog)
-      plots.(plot_name).axis(3:4) -= delta_pos(2);
+      plots.(plot_name).axis(s,3:4) -= delta_pos(2);
     else
       delta_pos_log = analysed.panzoom.point2 ./ analysed.panzoom.point1;
-      plots.(plot_name).axis(3:4) ./= delta_pos_log(2);
+      plots.(plot_name).axis(s,3:4) ./= delta_pos_log(2);
+    end % if
+
+    if (strcmp(plot_name, "modenv"))
+      % Get "corresponding" plot, i.e. with matching x-axis
+      s2 = mod(s+1,4)+1; % 1->3, 3->1, 2->4, 4->2
+      % Make x axes equal
+      plots.(plot_name).axis(s2,1:2) = plots.(plot_name).axis(s,1:2);
     end % if
 
     set_unsaved_changes(true);
 
-    % Replot the figure
-    figures.(plot_name).drawfcn();
+    % Don't replot the figure, just set the axes
+    for n = 1:figures.(plot_name).nplots
+      axis(figures.(plot_name).ax_handle(n), plots.(plot_name).axis(n,:));
+    end % for
 
   end % if
 
@@ -1144,6 +1133,9 @@ function panzoom_up(src, button, plot_name)
       return
     end % if
 
+    % Get subplot number
+    s = find(gca == figures.(plot_name).ax_handle);
+
     xmin = min([analysed.panzoom.point1(1), analysed.panzoom.point2(1)]);
     xmax = max([analysed.panzoom.point1(1), analysed.panzoom.point2(1)]);
     ymin = min([analysed.panzoom.point1(2), analysed.panzoom.point2(2)]);
@@ -1151,13 +1143,23 @@ function panzoom_up(src, button, plot_name)
 
     % Only zoom if zoom window has non-zero height and width
     if ((xmax > xmin) && (ymax > ymin))
-      plots.(plot_name).axis = [xmin, xmax, ymin, ymax];
+      plots.(plot_name).axis(s,:) = [xmin, xmax, ymin, ymax];
       set_unsaved_changes(true);
     end % if
-  end % if
 
-  % Redraw figure
-  figures.(plot_name).drawfcn();
+    if (strcmp(plot_name, "modenv"))
+      % Get "corresponding" plot, i.e. with matching x-axis
+      s2 = mod(s+1,4)+1; % 1->3, 3->1, 2->4, 4->2
+      % Make x axes equal
+      plots.(plot_name).axis(s2,1:2) = plots.(plot_name).axis(s,1:2);
+    end % if
+
+    % Don't replot the figure, just set the axes
+    for n = 1:figures.(plot_name).nplots
+      axis(figures.(plot_name).ax_handle(n), plots.(plot_name).axis(n,:));
+    end % for
+
+  end % if
 
   % Clear relevant "analysed" variables
   analysed = rmfield(analysed, "panzoom");
@@ -1174,7 +1176,11 @@ function point = fig2ax_coords(plot_name)
   global plots;
 
   f = figures.(plot_name).fig_handle;
-  a = figures.(plot_name).ax_handle;
+  a = gca; % <-- I have to use this instead of my own figures.(plot_name).ax_handle in order
+           %     to make it work for figures with more than one plot, namely, "modenv".
+
+  % Get subplot number (will equal 1 for figures with only one plot)
+  s = find(a == figures.(plot_name).ax_handle);
 
   % If either figure or axes handles don't exist, don't bother
   if (isempty(f) || isempty(a))
@@ -1194,7 +1200,7 @@ function point = fig2ax_coords(plot_name)
   f_pos   = get(f, "position");
   f_width = f_pos(3:4);
   a_pos   = get(a, "position"); % values are in figure window units
-  a_axis = plots.(plot_name).axis;
+  a_axis  = plots.(plot_name).axis(s,:);
   if (islog)
     a_axis(3:4) = log(a_axis(3:4));
   end % if

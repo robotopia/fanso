@@ -34,15 +34,15 @@ function plot_tdfs()
   nxs    = s(2);                 nys    = s(1);
   xmin   = -floor((nxs-1)/2);    xmax   = ceil((nxs-1)/2);
   ymin   = -floor((nys-1)/2);    ymax   = ceil((nys-1)/2);
-  xshift = -xmin;                yshift = -ymin;
+  analysed.tdfs.xshift = -xmin;       analysed.tdfs.yshift = -ymin;
 
   analysed.tdfs.xs      = [xmin:xmax];          % Units of   v_l*P1/(2*pi)   or   v_l*P1?
   analysed.tdfs.ys      = [ymin:ymax] / nys;    % Units v_t * P1
   ymin ./= nys;
   ymax ./= nys;
 
-  analysed.tdfs.centred = shift(analysed.tdfs.original, xshift, 2);
-  analysed.tdfs.centred = shift(analysed.tdfs.centred,  yshift, 1);
+  analysed.tdfs.centred = shift(analysed.tdfs.original, analysed.tdfs.xshift, 2);
+  analysed.tdfs.centred = shift(analysed.tdfs.centred,  analysed.tdfs.yshift, 1);
 
   % Apply filters
   apply_tdfs_filters();
