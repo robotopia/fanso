@@ -38,6 +38,8 @@ function plot_tdfs()
 
   analysed.tdfs.xs      = [xmin:xmax];          % Units of   v_l*P1/(2*pi)   or   v_l*P1?
   analysed.tdfs.ys      = [ymin:ymax] / nys;    % Units v_t * P1
+  ymin ./= nys;
+  ymax ./= nys;
 
   analysed.tdfs.centred = shift(analysed.tdfs.original, xshift, 2);
   analysed.tdfs.centred = shift(analysed.tdfs.centred,  yshift, 1);
@@ -71,53 +73,67 @@ function plot_tdfs()
   ylabel(a, "v_1P_1");
   set_title(plot_name);
 
-  % Plot the point of the new centre % ...Plot crosshairs instead?
-  if (~isempty(analysis.shift_DC))
+  % If in filter edit mode, plot filter boundaries,
+  % otherwise plot shifted DC axes
+  if (~isfield(analysed, "filter")) % = not in filter edit mode
+    % Plot the point of the new centre
+    if (~isempty(analysis.shift_DC))
+      hold(a, "on");
+      X = [analysis.shift_DC(1), xmin;
+           analysis.shift_DC(1), xmax];
+      Y = [ymin, analysis.shift_DC(2);
+           ymax, analysis.shift_DC(2)];
+      plot(a, X, Y, "g");
+      hold(a, "off");
+    end % if
+
+  else % = in filter edit mode
+
+    % Plot the filters if in filter mode
     hold(a, "on");
-    plot(a, analysis.shift_DC(1), analysis.shift_DC(2), "g+");
+    for n = 1:rows(analysis.filters) % For each filter in the list...
+
+      centre    = analysis.filters(n,1);
+      width     = analysis.filters(n,2);
+      direction = analysis.filters(n,3);
+
+      switch direction
+
+        case 0 % Horizontal filter
+
+          Xouter = [xmin, xmin;
+                    xmax, xmax];
+          Xinner = Xouter;
+          Youter = [centre+width,   centre-width;
+                    centre+width,   centre-width];
+          Yinner = [centre+width/2, centre-width/2;
+                    centre+width/2, centre-width/2];
+
+        case 1 % Vertical filter
+
+          Xouter = [centre+width,   centre-width;
+                    centre+width,   centre-width];
+          Xinner = [centre+width/2, centre-width/2;
+                    centre+width/2, centre-width/2];
+          Youter = [ymin, ymin;
+                    ymax, ymax];
+          Yinner = Youter;
+
+      end % switch
+
+      plot(a, Xouter, Youter, "g--", Xinner, Yinner, "g");
+
+    end % for
     hold(a, "off");
   end % if
 
-  % Plot the filters if in filter mode
-  hold(a, "on");
-  for n = 1:rows(analysis.filters) % For each filter in the list...
-
-    centre    = analysis.filters(n,1);
-    width     = analysis.filters(n,2);
-    direction = analysis.filters(n,3);
-
-    switch direction
-
-      case 0 % Horizontal filter
-
-        Xouter = [xmin, xmin;
-                  xmax, xmax];
-        Xinner = Xouter;
-        Youter = [centre+width,   centre-width;
-                  centre+width,   centre-width];
-        Yinner = [centre+width/2, centre-width/2;
-                  centre+width/2, centre-width/2];
-
-      case 1 % Vertical filter
-
-        Xouter = [centre+width,   centre-width;
-                  centre+width,   centre-width];
-        Xinner = [centre+width/2, centre-width/2;
-                  centre+width/2, centre-width/2];
-        Youter = [ymin, ymin;
-                  ymax, ymax];
-        Yinner = Youter;
-
-    end % switch
-
-    plot(a, Xouter, Youter, "g--", Xinner, Yinner, "g");
-
-  end % for
-  hold(a, "off");
-
   % Add a colorbar
-  colorbar(a);
-  colorbar("ylabel", clabel_text);
+  c = colorbar(a, "ylabel", clabel_text);
+  %colorbar(c, "ylabel", clabel_text);
+
+  % (For some reason, imagesc() wants to change the axes position, so we don't let it)
+  set(a, "position", [0.13, 0.11, 0.62, 0.815]);
+  set(c, "position", [0.8275, 0.11, 0.0465, 0.815]);
 
   % Get/Set axis limits
   if (~isempty(ax))
