@@ -508,6 +508,15 @@ function keypressfcn(src, evt)
         for n = 1:figures.(plot_name).nplots
           axis(figures.(plot_name).ax_handle(n), plots.(plot_name).axis(n,:));
         end % for
+
+        % If they've moved the timeseries plot and only_visible is turned on,
+        % then replot everything.
+        if (strcmp(plot_name, "timeseries") && analysis.only_visible)
+          for n = 1:length(plot_names)
+            figures.(plot_names{n}).drawfcn();
+          end % for
+        end % if
+
       end % if
 
     case 'b'
@@ -1044,9 +1053,24 @@ end % function
 function panzoom_down(src, button, plot_name)
 
   global analysed;
+  global figures;
 
   % Only do anything if the left or right mouse buttons were clicked
   if (~any(button == [1,3]))
+    return
+  end % if
+
+  % Only do anything if a pan-zoom-able axes was clicked
+  a = gca();
+  cont = false; % Flag for whether to continue or not
+  plot_names = fieldnames(figures);
+  for n = 1:length(plot_names)
+    if (any(a == figures.(plot_names{n}).ax_handle))
+      cont = true;
+    end % if
+  end % for
+
+  if (~cont)
     return
   end % if
 
@@ -1116,6 +1140,7 @@ function panzoom_up(src, button, plot_name)
 
   global figures;
   global plots;
+  global analysis;
   global analysed;
 
   % Panning takes care of itself, but when zooming...
@@ -1167,6 +1192,15 @@ function panzoom_up(src, button, plot_name)
   % Set the motion and up callback functions
   set(src, "windowbuttonmotionfcn", []);
   set(src, "windowbuttonupfcn",     []);
+
+  % If they've moved the timeseries plot and only_visible is turned on,
+  % then replot everything.
+  if (strcmp(plot_name, "timeseries") && analysis.only_visible)
+    plot_names = fieldnames(figures);
+    for n = 1:length(plot_names)
+      figures.(plot_names{n}).drawfcn();
+    end % for
+  end % if
 
 end % function
 
