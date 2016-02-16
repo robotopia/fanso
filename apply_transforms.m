@@ -3,6 +3,7 @@ function apply_transforms()
 % zero-padding, and windowing (Hamming/Hanning)
 
   global data;
+  global plots;
   global analysis;
   global analysed;
 

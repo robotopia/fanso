@@ -43,14 +43,14 @@ function plot_pulsestack()
 
   % Draw horizontal lines if only_visible is on
   if (analysis.only_visible)
-    ax = plots.timeseries.axis;
-    ymin = max([ax(1)/analysis.period,0.5]);
-    ymax = min([ax(2)/analysis.period,nys+0.5]);
+    tax = plots.timeseries.axis;
+    ymin = max([tax(1)/analysis.period,0.5]);
+    ymax = min([tax(2)/analysis.period,nys+0.5]);
     X = [-0.5,nxs-0.5] / nxs;
     Y1 = [ymin, ymin];
     Y2 = [ymax, ymax];
     hold on;
-    plot(a, X,Y1,'g',X,Y2,'g');
+    plot(a, X,Y1,'g', X,Y2,'g');
     hold off;
   end % if
 

@@ -3,6 +3,7 @@ function set_title(plot_name)
   global figures;
 
   global data;
+  global plots;
   global analysis;
   global analysed;
 

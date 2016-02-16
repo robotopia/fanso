@@ -8,7 +8,7 @@ function stackpulses(applytransforms)
     % Still zero-pad (so that we can form a rectangle matrix)
     np = analysis.period / analysed.dt; % Number of bins per pulse
     n_extra_zeros = round(ceil(analysed.N/np)*np) - analysed.N;
-    to_be_stacked = [data.timeseries; zeros(n_extra_zeros,1)];
+    to_be_stacked = [analysed.flattened; zeros(n_extra_zeros,1)];
   else
     apply_transforms();
     to_be_stacked = analysed.transformed;
