@@ -50,8 +50,13 @@ function plot_modenv()
 
   % Do singular-value decomposition on m_{phi,t} = m_phi(phi) * m_t(t)
   [U,S,V] = svd(M);
-  m_t     = U(:,1) * sqrt(S(1,1));
-  m_phi   = V(:,1) * sqrt(S(1,1));
+  if (~isfield(analysed, "Sn"))
+    analysed.Sn = 1;
+    analysed.SN = min(size(S));
+  end % if
+  Sn = analysed.Sn;
+  m_t     = U(:,Sn) * sqrt(S(Sn,Sn));
+  m_phi   = V(:,Sn) * sqrt(S(Sn,Sn));
 
   % Put U,S,V somewhere globally accessible
   analysed.modenv.U = U;
@@ -102,7 +107,8 @@ function plot_modenv()
   ylabel(a4, "Phase");
 
   % Calculate the "signal-to-noise" of the result
-  SNR = S(1,1) / (trace(S) - S(1,1)); % <-- Not sure if this is the correct way to do it...
+  analysed.SNR = S(Sn,Sn) / (trace(S) - S(Sn,Sn)); % <-- Not sure if this is the correct way to do it...
+  set_title(plot_name);
 
   % Get/Set axis limits
   if (~isempty(ax))

@@ -52,7 +52,7 @@ function set_title(plot_name)
           title(a, "");
 
         case "modenv"
-          title(a, "");
+          title(a(1), ["Sn = ", num2str(analysed.Sn), "    SNR = ", num2str(analysed.SNR)]);
 
       end % switch
     end % if

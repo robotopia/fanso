@@ -388,6 +388,21 @@ function keypressfcn(src, evt)
     return
   end % switch
 
+  if (strcmp(plot_name, "modenv"))
+    if (isfield(analysed, "Sn"))
+      switch evt.Key
+        case "rightarrow"
+          analysed.Sn = min([analysed.Sn+1, analysed.SN]);
+          figures.(plot_name).drawfcn();
+          return
+        case "leftarrow"
+          analysed.Sn = max([analysed.Sn-1, 1]);
+          figures.(plot_name).drawfcn();
+          return
+      end % switch
+    end  % if
+  end % if
+
   switch evt.Character
     case 'h'
       %%%%%%%%%%%%%%%%
