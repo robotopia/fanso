@@ -64,27 +64,35 @@ function plot_modenv()
   analysed.modenv.V = V;
 
   % Calculate various x-axes
-  if (analysis.only_visible)
+  if (analysis.only_visible_stack)
+    pax = plots.pulsestack.axis;
+    tmin = max([floor(pax(3)), 1]);
+    pmin_idx = max([floor(pax(1) * columns(analysed.stacked.all)), 0]) + 1;
+fflush(stdout);
+  elseif (analysis.only_visible)
     tax = plots.timeseries.axis;
     tmin = max([floor(tax(1)/analysis.period),0]) + 1;
-    tmax = tmin + length(m_t) - 1;
+    pmin_idx = 1;
   else
     tmin = 1;
-    tmax = length(m_t);
+    pmin_idx = 1;
   end % if
 
-  pulse_no = [tmin:tmax];
-  longitude = [0:(length(m_phi)-1)] / length(m_phi) * 360;
+  tmax     = tmin     + length(m_t)   - 1;
+  pmax_idx = pmin_idx + length(m_phi) - 1;
+
+  pulse_no  = [tmin:tmax];
+  longitude = [pmin_idx:pmax_idx] / columns(analysed.stacked.all) * 360;
 
   y1 = abs(m_t);
   y2 = abs(m_phi);
   y3 = arg(m_t) * 180/pi;
   y4 = arg(m_phi) * 180/pi;
 
-  plots.(plot_name).autoscale = [tmin, tmax, min(y1), max(y1);
-                                 0,    360,  min(y2), max(y2);
-                                 tmin, tmax, min(y3), max(y3);
-                                 0,    360,  min(y4), max(y4)];
+  plots.(plot_name).autoscale = [min(pulse_no),  max(pulse_no),  min(y1), max(y1);
+                                 min(longitude), max(longitude), min(y2), max(y2);
+                                 min(pulse_no),  max(pulse_no),  min(y3), max(y3);
+                                 min(longitude), max(longitude), min(y4), max(y4)];
 
   % Pulse no. vs Amplitude
   plot(a1, pulse_no, y1);

@@ -27,11 +27,7 @@ function plot_tdfs()
 
   % Stack the pulses
   if (analysis.only_visible_stack)
-    % Temporarily uncheck only_visible;
-    %only_visible_old = analysis.only_visible;
-    %analysis.only_visible = false;
-    stackpulses(false); % <-- "true" = apply transforms
-    %analysis.only_visible = only_visible_old;
+    stackpulses(false); % <-- "false" = don't apply transforms
 
     % Get only the visible part of the pulse stack
     ax_ps = plots.pulsestack.axis;
@@ -55,10 +51,10 @@ function plot_tdfs()
   ymin   = -floor((nys-1)/2);         ymax   = ceil((nys-1)/2);
   analysed.tdfs.xshift = -xmin;       analysed.tdfs.yshift = -ymin;
 
-  analysed.tdfs.xs      = [xmin:xmax] / nxs * s(2);          % Units of   v_l*P1/(2*pi)   or   v_l*P1?
-  analysed.tdfs.ys      = [ymin:ymax] / nys;    % Units v_t * P1
-  ymin ./= nys;
-  ymax ./= nys;
+  analysed.tdfs.dx      = s(2) / nxs; % Pixel size in x direction
+  analysed.tdfs.dy      = 1    / nys; % Pixel size in y direction
+  analysed.tdfs.xs      = [xmin:xmax] * analysed.tdfs.dx;  % Units of   v_l*P1/(2*pi)   or   v_l*P1?
+  analysed.tdfs.ys      = [ymin:ymax] * analysed.tdfs.dy;  % Units v_t * P1
 
   analysed.tdfs.centred = shift(analysed.tdfs.original, analysed.tdfs.xshift, 2);
   analysed.tdfs.centred = shift(analysed.tdfs.centred,  analysed.tdfs.yshift, 1);
@@ -82,6 +78,11 @@ function plot_tdfs()
   end % if
 
   % Plot it up!
+  xmin *= analysed.tdfs.dx;
+  xmax *= analysed.tdfs.dx;
+  ymin *= analysed.tdfs.dy;
+  ymax *= analysed.tdfs.dy;
+
   plots.(plot_name).autoscale = [xmin, xmax, ymin, ymax];
   imagesc(a, analysed.tdfs.xs, analysed.tdfs.ys, to_be_plotted);
   axis("xy");

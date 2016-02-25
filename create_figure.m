@@ -676,6 +676,7 @@ function keypressfcn(src, evt)
                                analysed.filter.quantised, ")\n", ...
                                "Right click to cancel"];
         figures.(plot_name).drawfcn();
+        figures.modenv.drawfcn();
         set(figures.(plot_name).fig_handle, "windowbuttondownfcn", @add_filter);
       end % if
 
@@ -687,6 +688,7 @@ function keypressfcn(src, evt)
         analysed.filter.editmode = true;
         analysed.tdfs_title = "Click on filter to remove\nRight click to cancel";
         figures.(plot_name).drawfcn();
+        figures.modenv.drawfcn();
         set(figures.(plot_name).fig_handle, "windowbuttondownfcn", @remove_filter);
       end % if
 
@@ -1458,6 +1460,7 @@ function shift_DC(src, button)
 
       % Redraw figure
       figures.tdfs.drawfcn();
+      figures.modenv.drawfcn();
 
     case 3 % Right button
 
@@ -1476,9 +1479,7 @@ function new_pos = quantise_tdfs_pos(pos)
 
   global analysed;
 
-  dx = 1;
-  dy = 1/rows(analysed.tdfs.original);
-  dxy = [dx, dy];
+  dxy = [analysed.tdfs.dx, analysed.tdfs.dy];
   new_pos = round(pos./dxy) .* dxy;
 
 end % function
