@@ -25,18 +25,37 @@ function plot_tdfs()
     return
   end % if
 
-  % Stack the pulses and perform 2D FFT
-  stackpulses(true); % <-- "true" = do only the visible timeseries
+  % Stack the pulses
+  if (analysis.only_visible_stack)
+    % Temporarily uncheck only_visible;
+    %only_visible_old = analysis.only_visible;
+    %analysis.only_visible = false;
+    stackpulses(false); % <-- "true" = apply transforms
+    %analysis.only_visible = only_visible_old;
+
+    % Get only the visible part of the pulse stack
+    ax_ps = plots.pulsestack.axis;
+    s     = size(analysed.stacked.all);
+    xmin = max([floor(ax_ps(1)*s(2) + 1), 1]);
+    xmax = min([ ceil(ax_ps(2)*s(2) + 1), s(2)]);
+    ymin = max([floor(ax_ps(3)), 1]);
+    ymax = min([floor(ax_ps(4)), s(1)]);
+    analysed.stacked.transformed = analysed.stacked.all(ymin:ymax, xmin:xmax);
+  else
+    stackpulses(true); % <-- "true" = apply transforms
+  end % if
+
+  % Perform the 2D FFT
   analysed.tdfs.original = fft2(analysed.stacked.transformed);
 
   % Shift in x and y so that (shifted) DC is in centre of grid (as opposed to position (1,1))
-  s = size(analysed.tdfs.original);
-  nxs    = s(2);                 nys    = s(1);
-  xmin   = -floor((nxs-1)/2);    xmax   = ceil((nxs-1)/2);
-  ymin   = -floor((nys-1)/2);    ymax   = ceil((nys-1)/2);
+  s2 = size(analysed.tdfs.original);
+  nxs    = s2(2);                     nys    = s2(1);
+  xmin   = -floor((nxs-1)/2);         xmax   = ceil((nxs-1)/2);
+  ymin   = -floor((nys-1)/2);         ymax   = ceil((nys-1)/2);
   analysed.tdfs.xshift = -xmin;       analysed.tdfs.yshift = -ymin;
 
-  analysed.tdfs.xs      = [xmin:xmax];          % Units of   v_l*P1/(2*pi)   or   v_l*P1?
+  analysed.tdfs.xs      = [xmin:xmax] / nxs * s(2);          % Units of   v_l*P1/(2*pi)   or   v_l*P1?
   analysed.tdfs.ys      = [ymin:ymax] / nys;    % Units v_t * P1
   ymin ./= nys;
   ymax ./= nys;

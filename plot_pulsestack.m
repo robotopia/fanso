@@ -41,8 +41,8 @@ function plot_pulsestack()
   apply_colormap(plot_name);
   axis("xy");
 
-  % Draw horizontal lines if only_visible is on
-  if (analysis.only_visible)
+  % Draw horizontal lines if only_visible is on and only_visible_stack is off
+  if (analysis.only_visible && ~analysis.only_visible_stack)
     tax = plots.timeseries.axis;
     ymin = max([tax(1)/analysis.period,0.5]);
     ymax = min([tax(2)/analysis.period,nys+0.5]);

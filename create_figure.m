@@ -237,20 +237,21 @@ function import_timeseries()
 
     % "analysis" structure
     analysis = struct();
-    analysis.profile_mask   = []; % A pair of phases that define a region of phases to be ignored in the breakpoint linear fits
-    analysis.period         = []; % The folding period
-    analysis.P2hat          = []; % The measured longitudinal "time" between subpulses, P2
-    analysis.P3hat          = []; % The measured "time" between subpulses at the same phase, P3
-    analysis.nprofile_bins  = []; % The number of bins to be used for folding output
-    analysis.zeromean       = 0;  % 0 = Do nothing;                1 = Zero mean before applying FFT
-    analysis.zeropad        = 0;  % 0 = Do nothing;                1 = Zero-pad to a nearly-whole number of periods
-    analysis.only_visible   = 0;  % 0 = Analyse entire timeseries; 1 = Analyse only visible timeseries
-    analysis.apply_hamming  = 0;  % 0 = Do nothing;                1 = Apply Hamming window
-    analysis.apply_hanning  = 0;  % 0 = Do nothing;                1 = Apply Hanning window
-    analysis.apply_bps      = 0;  % 0 = Do nothing;                1 = Apply breakpoints (i.e. "flatten" timeseries)
-    analysis.breakpoints    = []; % The x-coordinates of the breakpoints
-    analysis.filters        = []; % Horizontal and vertical filters (E&S 2002 - style) used on the 2DFS
-    analysis.shift_DC       = []; % Horizontal and vertical displacement of the origin in the 2DFS
+    analysis.profile_mask         = []; % A pair of phases that define a region of phases to be ignored in the breakpoint linear fits
+    analysis.period               = []; % The folding period
+    analysis.P2hat                = []; % The measured longitudinal "time" between subpulses, P2
+    analysis.P3hat                = []; % The measured "time" between subpulses at the same phase, P3
+    analysis.nprofile_bins        = []; % The number of bins to be used for folding output
+    analysis.zeromean             = 0;  % 0 = Do nothing;                1 = Zero mean before applying FFT
+    analysis.zeropad              = 0;  % 0 = Do nothing;                1 = Zero-pad to a nearly-whole number of periods
+    analysis.only_visible         = 0;  % 0 = Analyse entire timeseries; 1 = Analyse only visible timeseries
+    analysis.only_visible_stack   = 0;  % 0 = Analyse entire pulsestack; 1 = Analyse only visible pulsestack
+    analysis.apply_hamming        = 0;  % 0 = Do nothing;                1 = Apply Hamming window
+    analysis.apply_hanning        = 0;  % 0 = Do nothing;                1 = Apply Hanning window
+    analysis.apply_bps            = 0;  % 0 = Do nothing;                1 = Apply breakpoints (i.e. "flatten" timeseries)
+    analysis.breakpoints          = []; % The x-coordinates of the breakpoints
+    analysis.filters              = []; % Horizontal and vertical filters (E&S 2002 - style) used on the 2DFS
+    analysis.shift_DC             = []; % Horizontal and vertical displacement of the origin in the 2DFS
 
     % Draw the timeseries plot
     drawfcn = figures.timeseries.drawfcn;
@@ -440,6 +441,7 @@ function keypressfcn(src, evt)
               "P = change folding period by selecting pulsar",
               "s = change sampling rate",
               "v = toggle only analyse visible part of timeseries",
+              "V = toggle only analyse visible part of pulse stack",
               "z = toggle zero-meaning"},
               "Keyboard shortcuts");
     case '0'
@@ -530,6 +532,13 @@ function keypressfcn(src, evt)
           for n = 1:length(plot_names)
             figures.(plot_names{n}).drawfcn();
           end % for
+        end % if
+
+        % If they've moved the pulsestack plot and only_visible_stack is turned on,
+        % then replot 2DFS and modulation envelope plots
+        if (strcmp(plot_name, "pulsestack") && analysis.only_visible_stack)
+          figures.tdfs.drawfcn();
+          figures.modenv.drawfcn();
         end % if
 
       end % if
@@ -848,9 +857,18 @@ function keypressfcn(src, evt)
       %%%%%%%%%%%%%%%%%%%%%%%
       toggle_analysis_value("only_visible");
       figures.fft.drawfcn();
+      % Does profile plot need to be redrawn?
       figures.pulsestack.drawfcn();
       figures.tdfs.drawfcn();
-      % Do other plots need to be redrawn?
+      figures.modenv.drawfcn();
+
+    case 'V'
+      %%%%%%%%%%%%%%%%%%%%%%%
+      % Toggle only_visible %
+      %%%%%%%%%%%%%%%%%%%%%%%
+      toggle_analysis_value("only_visible_stack");
+      figures.tdfs.drawfcn();
+      figures.modenv.drawfcn();
 
     case 's'
       %%%%%%%%%%%%%%%%%%%%%%%%
@@ -927,6 +945,11 @@ end % function
 function set_analysis_value(name, value)
 
   global analysis;
+
+  if (~isfield(analysis, name))
+    warndlg(["Creating new field \"", name, "\""]);
+    analysis.(name) = [];
+  end % if
 
   if (~isequal(analysis.(name), value))
     analysis.(name) = value;
@@ -1215,6 +1238,13 @@ function panzoom_up(src, button, plot_name)
     for n = 1:length(plot_names)
       figures.(plot_names{n}).drawfcn();
     end % for
+  end % if
+
+  % If they've moved the pulsestack plot and only_visible_stack is turned on,
+  % then replot 2DFS and modulation envelope plots
+  if (strcmp(plot_name, "pulsestack") && analysis.only_visible_stack)
+    figures.tdfs.drawfcn();
+    figures.modenv.drawfcn();
   end % if
 
 end % function
