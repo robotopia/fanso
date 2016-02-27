@@ -1,3 +1,3 @@
 # fanso
 Fourier ANalysis Suite in Octave
-Requires Octave version 4.0.0
+Requires Octave Version 4.0.0
