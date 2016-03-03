@@ -367,9 +367,6 @@ end % function
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 function keypressfcn(src, evt)
 
-evt
-fflush(stdout);
-
   global figures;
 
   global data;
@@ -829,19 +826,25 @@ fflush(stdout);
       end % if
 
     case 'P'
-      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-      %% Changed to read in period (1/F0) from ephemeris  (BWM) %%
-      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%      
-      parstr = inputdlg({"Enter ephemeris file location:"}, "Ephemeris location", 1, {"ephem.par"});
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+      %% Read in period (1/F0) from ephemeris  (BWM) %%
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-      parvals = read_par(parstr{1});
+      % Open up an Open File dialog box
+      [parfile, parpath] = uigetfile({"*.par", "Ephemeris file"});
 
-      if isfield(parvals,'P0')
-        set_period(str2num(parvals.P0))
-      elseif isfield(parvals,'F0')
-        set_period(1/str2num(parvals.F0))
-      else
-        warndlg("No rotation frequency (F0) or period (P0) found in ephemeris.")
+      if (~strcmp(parpath, "0")) % then they actually selected a file
+
+        parvals = read_par([parpath, parfile]);
+
+        if isfield(parvals,'P0')
+          set_period(str2num(parvals.P0))
+        elseif isfield(parvals,'F0')
+          set_period(1/str2num(parvals.F0))
+        else
+          warndlg("No rotation frequency (F0) or period (P0) found in ephemeris.")
+        end % if
+
       end % if
 
       %if isfield(parvals,'F1')
