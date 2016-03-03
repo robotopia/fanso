@@ -367,6 +367,9 @@ end % function
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 function keypressfcn(src, evt)
 
+evt
+fflush(stdout);
+
   global figures;
 
   global data;
@@ -441,7 +444,7 @@ function keypressfcn(src, evt)
               "n = toggle Hanning window",
               "o = change folding period by clicking on FFT",
               "p = change folding period manually",
-              "P = change folding period by selecting pulsar",
+              "P = change the folding period by providing an ephemeris file",
               "s = change sampling rate",
               "v = toggle only analyse visible part of timeseries",
               "V = toggle only analyse visible part of pulse stack",
@@ -826,16 +829,26 @@ function keypressfcn(src, evt)
       end % if
 
     case 'P'
-      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-      % Change folding period by selecting pulsar from list %
-      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-      global pulsars
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+      %% Changed to read in period (1/F0) from ephemeris  (BWM) %%
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%      
+      parstr = inputdlg({"Enter ephemeris file location:"}, "Ephemeris location", 1, {"ephem.par"});
 
-      pulsarnames = fieldnames(pulsars);
-      [sel, ok] = listdlg("ListString", pulsarnames, "SelectionMode", "Single", "Name", "Select pulsar");
-      if (ok)
-        set_period(pulsars.(pulsarnames{sel}).period);
+      parvals = read_par(parstr{1});
+
+      if isfield(parvals,'P0')
+        set_period(str2num(parvals.P0))
+      elseif isfield(parvals,'F0')
+        set_period(1/str2num(parvals.F0))
+      else
+        warndlg("No rotation frequency (F0) or period (P0) found in ephemeris.")
       end % if
+
+      %if isfield(parvals,'F1')
+      %  set_pdot(1/str2num(parvals.F1'))
+      %else
+      %  set_pdot(0)   
+      %end % if
 
     case 'q'
       %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
