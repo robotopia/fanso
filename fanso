@@ -1,0 +1,14 @@
+#!/bin/bash
+
+if [ ! -z $1 ]
+then
+  if [[ "$1" = /* ]];
+  then
+    first_arg=$1
+  else
+    first_arg=$PWD/$1
+  fi
+fi
+
+cd ~/src/fanso
+octave -q --persist --no-gui fanso.m $first_arg

@@ -197,5 +197,3 @@ function apply_tdfs_filters()
   analysed.tdfs.filtered = analysed.tdfs.centred .*= transmission_total;
 
 end % function
-
-

@@ -12,7 +12,7 @@ function load_data(loadpath, loadfile)
     filepath = loadpath;
 
   catch
-    errordlg({["Unable to load file \"", loadpath, "\", loadfile, "\""], lasterr()});
+    errordlg({["Unable to load file \"", loadpath, loadfile, "\""], lasterr()});
   end % try_catch
 
 end % function
