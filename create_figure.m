@@ -79,6 +79,7 @@ function new_fan()
 
   % Set callback function for when a key is pressed
   set(figures.timeseries.fig_handle, "keypressfcn", []);
+  set(figures.timeseries.fig_handle, "windowbuttondownfcn", []);
 end % function
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -114,6 +115,7 @@ function load_fan()
     % Set callback function for when a key is pressed
     % (in case it was unset by new_fan())
     set(figures.timeseries.fig_handle, "keypressfcn", @keypressfcn);
+    set(figures.timeseries.fig_handle, "windowbuttondownfcn", {@panzoom_down, "timeseries"});
   end % if
 
 end % function
@@ -265,6 +267,7 @@ function import_timeseries()
     % Set callback function for when a key is pressed
     % (in case it was unset by new_fan())
     set(figures.timeseries.fig_handle, "keypressfcn", @keypressfcn);
+    set(figures.timeseries.fig_handle, "windowbuttondownfcn", {@panzoom_down, "timeseries"});
 
     % Clear the (saved) filename and path variables
     filename = [];

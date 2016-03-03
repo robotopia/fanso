@@ -12,7 +12,14 @@ function fanso(init_filename)
     __FANSO_INSTANCE__ = 1;
   else
     % Exit gracefully
-    disp('FANSO already running');
+    disp("FANSO already running");
+    return
+  end
+
+  % Second, check that Octave 4.0.0 is being used
+  v = version();
+  if (str2num(v(1)) < 4)
+    disp("This software requires at least 4.0.0");
     return
   end
 
