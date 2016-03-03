@@ -444,7 +444,7 @@ fflush(stdout);
               "n = toggle Hanning window",
               "o = change folding period by clicking on FFT",
               "p = change folding period manually",
-              "P = change folding period by selecting pulsar",
+              "P = change the folding period by providing an ephemeris file",
               "s = change sampling rate",
               "v = toggle only analyse visible part of timeseries",
               "V = toggle only analyse visible part of pulse stack",
