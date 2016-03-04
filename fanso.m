@@ -34,9 +34,14 @@ else
   graphics_toolkit(gtk);
 end % if
 
+% Parse arguments (assumes that the wrapper bash script has been used to invoke FANSO)
+arg_list = argv();
+
 % No file is loaded yet...
-global filename
+global filename;
+global filepath;
 filename = [];
+filepath = arg_list{1}; % This is set to the directory FANSO was invoked from
 
 % Setup figure and plot handling system
 global figures;
@@ -71,10 +76,9 @@ winpos_y   = gapsize;
 figures.fft.defaultpos = [winpos_x, winpos_y, winsize_x, winsize_y];
 
 % Load initial file, if given
-if (nargin >= 1)
-  arg_list = argv();
-  init_filename = arg_list{1};
-  load_data("", init_filename); % <--- cause for errors here, if user supplies absolute path
+if (nargin >= 2)
+  filename = arg_list{2};
+  load_data("", filename); % <--- cause for errors here, if user supplies absolute path
 
   % Draw the main (=timeseries) window
   create_figure("timeseries");

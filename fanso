@@ -2,13 +2,12 @@
 
 if [ ! -z $1 ]
 then
-  if [[ "$1" = /* ]];
-  then
-    first_arg=$1
-  else
-    first_arg=$PWD/$1
-  fi
+  abspath=`readlink -f $1`
+  filename=`basename $abspath`
+  filepath=`dirname $abspath`
+else
+  filepath=$PWD
 fi
 
 cd ~/src/fanso
-octave -q --persist --no-gui fanso.m $first_arg
+octave -q --persist --no-gui fanso.m $filepath $filename

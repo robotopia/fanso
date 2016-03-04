@@ -171,6 +171,7 @@ function import_timeseries()
   global data;
   global plots;
   global analysis;
+  global analysed;
 
   global filename;
   global filepath;
@@ -181,7 +182,11 @@ function import_timeseries()
   end % if
 
   % Get file from Open File dialog box
-  [loadfile, loadpath] = uigetfile();
+  if (isempty(filepath))
+    filepath = pwd();
+  end % if
+
+  [loadfile, loadpath] = uigetfile([filepath, "/*"]);
 
   if (loadfile ~= 0) % The user has actually chosen a file
     try
@@ -220,8 +225,13 @@ function import_timeseries()
     data.timeunits     = "sec";
     data.frequnits     = "Hz";
 
-    % Reset all the other variables
-    % "plots" structure
+    % Calculate the time series abcissa, etc.
+    analysed = struct();
+    analysed.N  = length(data.timeseries);             % The length of the timeseries
+    analysed.dt = 1/data.samplingrate;                 % The time between adjacent samples
+    analysed.t  = [0:(analysed.N-1)]' * analysed.dt;   % The time axis
+
+    % Reset all the other "temporary" variables
     plots = struct();
 
     for n = 1:length(plot_names)
@@ -271,7 +281,7 @@ function import_timeseries()
 
     % Clear the (saved) filename and path variables
     filename = [];
-    filepath = [];
+    filepath = loadpath;
 
     % Are there changes? Yes!
     set_unsaved_changes(true);
