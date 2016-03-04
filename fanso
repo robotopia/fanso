@@ -1,5 +1,7 @@
 #!/bin/bash
 
+fansodir=`dirname $0`
+
 if [ ! -z $1 ]
 then
   abspath=`readlink -f $1`
@@ -9,5 +11,5 @@ else
   filepath=$PWD
 fi
 
-cd ~/src/fanso
+cd $fansodir
 octave -q --persist --no-gui fanso.m $filepath $filename
