@@ -40,6 +40,7 @@ function create_figure(plot_name)
       m_data_save    = uimenu(m_data, "label", "&Save",       "callback", @save_fan,   "enable", enable_state);
       m_data_saveas  = uimenu(m_data, "label", "Save &As..", "callback", @saveas_fan, "enable", enable_state);
       m_data_import  = uimenu(m_data, "label", "&Import timeseries..", "callback", @import_timeseries, "separator", "on");
+      m_data_importp = uimenu(m_data, "label", "Import &PRESTO .dat..", "callback", @import_presto_dat);
       m_data_export  = uimenu(m_data, "label", "&Export timeseries..", "callback", @export_timeseries, "enable", enable_state);
     end % if
 
@@ -160,6 +161,130 @@ function cont = saveas_fan()
   else
     cont = false;
   end % if
+
+end % function
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+function import_presto_dat()
+
+  global figures;
+
+  global data;
+  global plots;
+  global analysis;
+  global analysed;
+
+  global filename;
+  global filepath;
+
+  % Ask about unsaved changes
+  if (~offer_to_save())
+    return
+  end % if
+
+  % Get file from Open File dialog box
+  if (isempty(filepath))
+    filepath = pwd();
+  end % if
+
+  [loadfile, loadpath] = uigetfile([filepath, "/*"]);
+
+  if (loadfile ~= 0) % The user has actually chosen a file
+    try
+      % Load the contents of the selected file into a vector
+      f = fopen([loadpath, loadfile]);
+      dat = fread(f, Inf, "float32");
+      fclose(f);
+    catch
+      errordlg("This file is in an unreadable format.\nSee the '-ascii' option in Octave's load() function for details", ...
+               "Open file error");
+      return
+    end % try
+
+    % Delete all figures other than timeseries
+    plot_names = fieldnames(figures);
+    for n = 1:length(plot_names)
+
+      plot_name = plot_names{n};
+
+      if (strcmp(plot_name, "timeseries"))
+        continue;
+      end % if
+
+      close(figures.(plot_name).fig_handle);
+
+    end % for
+
+    % Set all the data variables
+    data = struct();
+    data.timeseries    = dat(:,1);
+    data.samplingrate  = 1;
+    data.timeunits     = "sec";
+    data.frequnits     = "Hz";
+
+    % Calculate the time series abcissa, etc.
+    analysed = struct();
+    analysed.N  = length(data.timeseries);             % The length of the timeseries
+    analysed.dt = 1/data.samplingrate;                 % The time between adjacent samples
+    analysed.t  = [0:(analysed.N-1)]' * analysed.dt;   % The time axis
+
+    % Reset all the other "temporary" variables
+    plots = struct();
+
+    for n = 1:length(plot_names)
+      if (figures.(plot_names{n}).dims == 2)
+        plots.(plot_names{n}).cmap        = 8;              % Colormap idx (8 = greyscale)
+        plots.(plot_names{n}).cinv        = false;          % Invert colormap?
+        plots.(plot_names{n}).cax         = [];             % axis limits for the colormap
+      end % if
+      if (figures.(plot_names{n}).isfft)
+        plots.(plot_names{n}).islog       = 0;              % Display values in linear(=0) | log(=1) scale
+        plots.(plot_names{n}).ispower     = 0;              % Display values as amplitudes(=0) | powers(=1)
+      end % if
+      plots.(plot_names{n}).axis          = [];             % xlim, ylim, etc. For saving to file
+    end % for
+
+    % "analysis" structure
+    analysis = struct();
+    analysis.profile_mask         = []; % A pair of phases that define a region of phases to be ignored in the breakpoint linear fits
+    analysis.period               = []; % The folding period
+    analysis.P2hat                = []; % The measured longitudinal "time" between subpulses, P2
+    analysis.P3hat                = []; % The measured "time" between subpulses at the same phase, P3
+    analysis.nprofile_bins        = []; % The number of bins to be used for folding output
+    analysis.zeromean             = 0;  % 0 = Do nothing;                1 = Zero mean before applying FFT
+    analysis.zeropad              = 0;  % 0 = Do nothing;                1 = Zero-pad to a nearly-whole number of periods
+    analysis.only_visible         = 0;  % 0 = Analyse entire timeseries; 1 = Analyse only visible timeseries
+    analysis.only_visible_stack   = 0;  % 0 = Analyse entire pulsestack; 1 = Analyse only visible pulsestack
+    analysis.apply_hamming        = 0;  % 0 = Do nothing;                1 = Apply Hamming window
+    analysis.apply_hanning        = 0;  % 0 = Do nothing;                1 = Apply Hanning window
+    analysis.apply_bps            = 0;  % 0 = Do nothing;                1 = Apply breakpoints (i.e. "flatten" timeseries)
+    analysis.breakpoints          = []; % The x-coordinates of the breakpoints
+    analysis.filters              = []; % Horizontal and vertical filters (E&S 2002 - style) used on the 2DFS
+    analysis.shift_DC             = []; % Horizontal and vertical displacement of the origin in the 2DFS
+
+    % Draw the timeseries plot
+    drawfcn = figures.timeseries.drawfcn;
+    drawfcn();
+
+    % Change which menu items are enabled
+    global m_data_save m_data_saveas m_data_export;
+    set([m_data_saveas, m_data_export], "enable", "on");
+    set(m_data_save, "enable", "off");
+
+    % Set callback function for when a key is pressed
+    % (in case it was unset by new_fan())
+    set(figures.timeseries.fig_handle, "keypressfcn", @keypressfcn);
+    set(figures.timeseries.fig_handle, "windowbuttondownfcn", {@panzoom_down, "timeseries"});
+
+    % Clear the (saved) filename and path variables
+    filename = [];
+    filepath = loadpath;
+
+    % Are there changes? Yes!
+    set_unsaved_changes(true);
+
+  end % if
+
 
 end % function
 
